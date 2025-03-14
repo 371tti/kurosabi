@@ -4,6 +4,7 @@ pub struct Req {
     pub method: Method,
     pub path: Path,
     pub header: Header,
+    pub version: String,
 }
 
 impl Req {
@@ -12,6 +13,7 @@ impl Req {
             method: Method::GET,
             path: Path::new(),
             header: Header::new(),
+            version: String::new(),
         }
     }
 }

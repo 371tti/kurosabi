@@ -1,9 +1,8 @@
-use std::{pin::Pin, sync::Arc};
+use std::sync::Arc;
 
 use crossbeam_queue::ArrayQueue;
 use log::error;
 use tokio::sync::Notify;
-use async_trait::async_trait;
 
 use super::TcpConnection;
 

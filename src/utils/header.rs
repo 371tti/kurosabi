@@ -17,10 +17,38 @@ impl Header {
         self.headers.push((key.to_string(), value.to_string()));
     }
 
+    pub fn del(&mut self, key: &str) {
+        self.headers.retain(|(k, _)| k.to_ascii_uppercase() != key);
+    }
+
+    pub fn dels(&mut self, key: &str) {
+        self.headers.retain(|(k, _)| k.to_ascii_uppercase() != key);
+    }
+
     /// ヘッダを取得する
     /// 任意のキーに対応するヘッダを線形探索します
     pub fn get(&self, key: &str) -> Option<&str> {
         self.headers.iter().find(|(k, _)| k.to_ascii_uppercase() == key).map(|(_, v)| v.as_str())
+    }
+
+    pub fn gets(&self, key: &str) -> Vec<&str> {
+        self.headers.iter().filter(|(k, _)| k.to_ascii_uppercase() == key).map(|(_, v)| v.as_str()).collect()
+    }
+
+    pub fn index_get(&self, index: usize) -> Option<(&str, &str)> {
+        self.headers.get(index).map(|(k, v)| (k.as_str(), v.as_str()))
+    }
+
+    pub fn index_del(&mut self, index: usize) {
+        self.headers.remove(index);
+    }
+
+    pub fn index(&self, key: &str) -> Option<usize> {
+        self.headers.iter().position(|(k, _)| k.to_ascii_uppercase() == key)
+    }
+
+    pub fn indexs(&self, key: &str) -> Vec<usize> {
+        self.headers.iter().enumerate().filter(|(_, (k, _))| k.to_ascii_uppercase() == key).map(|(i, _)| i).collect()
     }
 
     /// head: host を取得する
@@ -140,6 +168,21 @@ impl Method {
             "CONNECT" => Some(Method::CONNECT),
             "PATCH" => Some(Method::PATCH),
             method => Some(Method::UNKNOWN(method.to_string())),
+        }
+    }
+
+    pub fn to_str(&self) -> &str {
+        match self {
+            Method::GET => "GET",
+            Method::POST => "POST",
+            Method::HEAD => "HEAD",
+            Method::PUT => "PUT",
+            Method::DELETE => "DELETE",
+            Method::OPTIONS => "OPTIONS",
+            Method::TRACE => "TRACE",
+            Method::CONNECT => "CONNECT",
+            Method::PATCH => "PATCH",
+            Method::UNKNOWN(method) => method,
         }
     }
 }
