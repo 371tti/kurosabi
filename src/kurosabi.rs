@@ -1,5 +1,5 @@
 use std::{pin::Pin, sync::Arc};
-use log::{error, info};
+use log::{error, info, warn};
 use tokio::io::{AsyncBufReadExt, BufReader};
 
 use tokio::net::TcpStream;
@@ -135,7 +135,8 @@ where
         self.register_route(Method::UNKNOWN("OTHER".to_string()), pattern, handler);
     }
 
-    pub fn server(self) -> KurosabiServerBuilder<DefaultWorker<C, R>> {
+    pub fn server(mut self) -> KurosabiServerBuilder<DefaultWorker<C, R>> {
+        self.router.build();
         let worker = std::sync::Arc::new(DefaultWorker::new(std::sync::Arc::new(self.router), std::sync::Arc::new(self.context)));
         KurosabiServerBuilder::new(worker)
     }
@@ -220,12 +221,22 @@ where
         if let Some(handler) = self.router.route(&mut req, &mut c) {
             let mut res = Res::new();
             res = handler(&mut req, res, Box::new(c)).await.unwrap_or_else(|e| {
-                error!("{}{:?}", head_info, e);
+                error!("{:?}", e);
                 e.err_res()
             });
+            if res.code >= 500 {
+                error!("{}- \x1b[31m{}\x1b[0m\n", head_info, res.code);
+            } else if res.code >= 400 {
+                warn!("{}- \x1b[33m{}\x1b[0m\n", head_info, res.code);
+            } else {
+                info!("{}- \x1b[32m{}\x1b[0m\n", head_info, res.code);
+            }
             res.write_out_connection(&mut connection.socket).await.unwrap();
         } else {
-            let mut res = HttpError::NotFound.err_res();
+            let e = HttpError::NotFound;
+            warn!("{:?}", e);
+            let mut res = e.err_res();
+            warn!("{}- \x1b[33m{}\x1b[0m\n", head_info, res.code);
             res.write_out_connection(&mut connection.socket).await.unwrap();
         }
     }

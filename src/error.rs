@@ -50,10 +50,10 @@ impl std::fmt::Display for HttpError {
 impl std::fmt::Debug for HttpError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            HttpError::BadRequest(message) => write!(f, "Bad Request: {}", message),
-            HttpError::NotFound => write!(f, "Not Found"),
-            HttpError::MethodNotAllowed => write!(f, "Method Not Allowed"),
-            HttpError::InternalServerError => write!(f, "Internal Server Error"),
+            HttpError::BadRequest(message) =>           write!(f, "Bad Request: {}", message),
+            HttpError::NotFound =>                               write!(f, "Not Found ============="),
+            HttpError::MethodNotAllowed =>                       write!(f, "Method Not Allowed ===="),
+            HttpError::InternalServerError =>                    write!(f, "Internal Server Error ="),
             HttpError::CUSTOM(status, message) => write!(f, "Status: {}, Message: {}", status, message),
         }
     }

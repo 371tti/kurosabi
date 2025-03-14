@@ -24,6 +24,9 @@ async fn main() {
     let mut server = kurosabi.server()
         .host([0, 0, 0, 0])
         .port(80)
+        .thread(4)
+        .thread_name("kurosabi-worker".to_string())
+        .queue_size(128)
         .build();
 
     server.run().await;

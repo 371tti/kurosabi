@@ -22,8 +22,8 @@ pub struct Path {
     /// パスの文字列(完全)を保持
     /// 遅延処理をする
     pub path: String,
-    pub segments: Segments,
-    pub query: Query,
+    segments: Segments,
+    query: Query,
 }
 
 impl Path {
@@ -35,14 +35,30 @@ impl Path {
         }
     }
 
-    pub fn dec_segment(&mut self) {
+    pub fn get_raw_path(&self) -> &str {
+        &self.path
+    }
+
+    pub fn get_path(&mut self) -> String {
+        self.dec_segment();
+        self.segments.segments.join("/")
+    }
+
+    pub fn get_query(&mut self, key: &str) -> Option<String> {
+        self.dec_query();
+        self.query.query.iter()
+            .find(|(k, _)| k == key)
+            .map(|(_, v)| v.clone())
+    }
+
+    fn dec_segment(&mut self) {
         self.segments.segments = self.path.split('/')
             .filter(|s| !s.is_empty())
             .map(String::from)
             .collect();
     }
 
-    pub fn dec_query(&mut self) {
+    fn dec_query(&mut self) {
         self.query.query = self.path.split('?')
             .nth(1)
             .unwrap_or("")

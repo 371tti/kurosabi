@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::context::Context;
-use crate::error::{HttpError, KurosabiError};
+use crate::error::HttpError;
 use crate::{context::DefaultContext, request::Req, response::Res, utils::header::Method};
 use regex::Regex;
 
