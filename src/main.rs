@@ -37,7 +37,19 @@ async fn main() {
     kurosabi.post("/submit",  |req, res, c| async move {
         let body = req.body().await;
         println!("Received: {}", body);
-        let res = res.text(&format!("Received: {}", body));
+        let res = res.html(&format!(
+            r#"
+                <html>
+                    <head>
+                        <title>Post Test</title>
+                    </head>
+                    <body>
+                        <p>Received: {}</p>
+                    </body>
+                </html>
+            "#,
+            body
+        ));
         Ok(res)
     });
 
