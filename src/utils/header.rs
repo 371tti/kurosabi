@@ -13,6 +13,10 @@ impl Header {
         }
     }
 
+    pub fn set(&mut self, key: &str, value: &str) {
+        self.headers.push((key.to_string(), value.to_string()));
+    }
+
     /// ヘッダを取得する
     /// 任意のキーに対応するヘッダを線形探索します
     pub fn get(&self, key: &str) -> Option<&str> {
@@ -117,4 +121,25 @@ pub enum Method {
     /// PATCHメソッド
     /// cash_able: conditional
     PATCH,
+
+    /// カスタム
+    UNKNOWN(String),
+}
+
+impl Method {
+    /// 文字列からMethodを取得する
+    pub fn from_str(method: &str) -> Option<Method> {
+        match method {
+            "GET" => Some(Method::GET),
+            "POST" => Some(Method::POST),
+            "HEAD" => Some(Method::HEAD),
+            "PUT" => Some(Method::PUT),
+            "DELETE" => Some(Method::DELETE),
+            "OPTIONS" => Some(Method::OPTIONS),
+            "TRACE" => Some(Method::TRACE),
+            "CONNECT" => Some(Method::CONNECT),
+            "PATCH" => Some(Method::PATCH),
+            method => Some(Method::UNKNOWN(method.to_string())),
+        }
+    }
 }

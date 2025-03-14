@@ -5,3 +5,4 @@ pub mod response;
 pub mod router;
 pub mod utils;
 pub mod server;
+pub mod error;

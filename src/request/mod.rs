@@ -6,6 +6,16 @@ pub struct Req {
     pub header: Header,
 }
 
+impl Req {
+    pub fn new() -> Req {
+        Req {
+            method: Method::GET,
+            path: Path::new(),
+            header: Header::new(),
+        }
+    }
+}
+
 pub struct Path {
     /// パスの文字列(完全)を保持
     /// 遅延処理をする
