@@ -1,21 +1,26 @@
-use crate::utils::header::{Header, Method};
+use tokio::io::BufReader;
 
-pub struct Req {
+use crate::{server::TcpConnection, utils::header::{Header, Method}};
+
+pub struct Req<'a> {
     pub method: Method,
     pub path: Path,
     pub header: Header,
     pub version: String,
+    pub reader: Option<BufReader<&'a mut TcpConnection>>,
 }
 
-impl Req {
-    pub fn new() -> Req {
+impl<'a> Req<'a> {
+    pub fn new() -> Req<'a> {
         Req {
             method: Method::GET,
             path: Path::new(),
             header: Header::new(),
             version: String::new(),
+            reader: None,
         }
     }
+
 }
 
 pub struct Path {

@@ -42,7 +42,7 @@ impl Res {
         self // return self to allow method chaining
     }
 
-    pub async fn file(mut self, req: &Req, file: &std::path::PathBuf) -> Result<Self, HttpError> {
+    pub async fn file<'a>(mut self, req: &Req<'a>, file: &std::path::PathBuf) -> Result<Self, HttpError> {
         self.header.set("Content-Type", "application/octet-stream");
         let metadata = file.metadata().map_err(|_| HttpError::InternalServerError)?;
         self.header.set("Content-Length", &metadata.len().to_string());

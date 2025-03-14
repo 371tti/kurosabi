@@ -121,3 +121,9 @@ impl<W: Worker + 'static> KurosabiServer<W> {
 pub struct TcpConnection {
     pub socket: tokio::net::TcpStream,
 }
+
+impl TcpConnection {
+    pub fn new(socket: tokio::net::TcpStream) -> TcpConnection {
+        TcpConnection { socket }
+    }
+}

@@ -163,7 +163,7 @@ where
         }
     }
 
-    async fn http_reader_head(reader: &mut BufReader<&mut TcpStream>) -> std::result::Result<Req, KurosabiError> {
+    async fn http_reader_head<'a>(reader: &'a mut BufReader<&'a mut TcpStream>) -> std::result::Result<Req<'a>, KurosabiError> {
         let mut req = Req::new();
         let mut line_buf = String::with_capacity(1024);
 
