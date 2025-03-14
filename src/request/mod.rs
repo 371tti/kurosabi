@@ -1,27 +1,35 @@
-use tokio::io::BufReader;
+use std::sync::Arc;
+
+use tokio::{io::AsyncReadExt, sync::Mutex};
 
 use crate::{server::TcpConnection, utils::header::{Header, Method}};
 
-pub struct Req<'a> {
+pub struct Req {
     pub method: Method,
     pub path: Path,
     pub header: Header,
     pub version: String,
-    pub reader: Option<BufReader<&'a mut TcpConnection>>,
+    pub connection: Arc<Mutex<TcpConnection>>
 }
 
-impl<'a> Req<'a> {
-    pub fn new() -> Req<'a> {
+impl Req {
+    pub fn new(connection: Arc<Mutex<TcpConnection>>) -> Req {
         Req {
             method: Method::GET,
             path: Path::new(),
             header: Header::new(),
             version: String::new(),
-            reader: None,
+            connection,
         }
     }
 
+    pub async fn body(&self) -> String {
+        let mut buf = String::new();
+        self.connection.lock().await.reader().read_to_string(&mut buf).await.unwrap();
+        buf
+    }
 }
+
 
 pub struct Path {
     /// パスの文字列(完全)を保持
@@ -42,7 +50,7 @@ impl Path {
 
     pub fn get_raw_path(&self) -> &str {
         &self.path
-    }
+    }   
 
     pub fn get_path(&mut self) -> String {
         self.dec_segment();

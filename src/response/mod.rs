@@ -42,7 +42,7 @@ impl Res {
         self // return self to allow method chaining
     }
 
-    pub async fn file<'a>(mut self, req: &Req<'a>, file: &std::path::PathBuf) -> Result<Self, HttpError> {
+    pub async fn file(mut self, req: &Req, file: &std::path::PathBuf) -> Result<Self, HttpError> {
         self.header.set("Content-Type", "application/octet-stream");
         let metadata = file.metadata().map_err(|_| HttpError::InternalServerError)?;
         self.header.set("Content-Length", &metadata.len().to_string());
@@ -117,8 +117,7 @@ impl Res {
         }
     }
 
-    pub async fn write_out_connection(&mut self, conn: &mut TcpStream) -> Result<(), KurosabiError> {
-        let mut writer = BufWriter::new(conn);
+    pub async fn write_out_connection(&mut self, writer: &mut tokio::io::BufWriter<tokio::net::tcp::OwnedWriteHalf>) -> Result<(), KurosabiError> {
         writer.write_all(format!("HTTP/1.1 {}\r\n", self.code).as_bytes()).await.map_err(|e| KurosabiError::IoError(e))?;
         for (key, value) in &self.header.headers {
             writer.write_all(format!("{}: {}\r\n", key, value).as_bytes()).await.map_err(|e| KurosabiError::IoError(e))?;

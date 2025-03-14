@@ -17,8 +17,28 @@ async fn main() {
         Ok(res)
     });
 
+    kurosabi.get("/post_test", |req, res, c| async move {
+        let res = res.html(r#"
+            <html>
+                <head>
+                    <title>Post Test</title>
+                </head>
+                <body>
+                    <form action="/submit" method="post">
+                        <input type="text" name="name" />
+                        <input type="submit" value="Submit" />
+                    </form>
+                </body>
+            </html>
+        "#);
+        Ok(res)
+    });
+
     kurosabi.post("/submit",  |req, res, c| async move {
-        Err(HttpError::NotFound)
+        let body = req.body().await;
+        println!("Received: {}", body);
+        let res = res.text(&format!("Received: {}", body));
+        Ok(res)
     });
 
     let mut server = kurosabi.server()

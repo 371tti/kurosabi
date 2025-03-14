@@ -112,18 +112,35 @@ impl<W: Worker + 'static> KurosabiServer<W> {
         loop {
             let (socket, _) = listener.accept().await.unwrap();
             socket.set_nodelay(true).unwrap();
-            let connection = TcpConnection { socket };
+            let connection = TcpConnection::new(socket);
             self.worker.assign_connection(connection).await;
         }
     }
 }
 
 pub struct TcpConnection {
-    pub socket: tokio::net::TcpStream,
+    
+    pub reader: tokio::io::BufReader<tokio::net::tcp::OwnedReadHalf>,
+    pub writer: tokio::io::BufWriter<tokio::net::tcp::OwnedWriteHalf>,
 }
 
 impl TcpConnection {
+    /// 分割して BufReader と BufWriter を一度だけ作成し、保存します
     pub fn new(socket: tokio::net::TcpStream) -> TcpConnection {
-        TcpConnection { socket }
+        let (read_half, write_half) = socket.into_split();
+        TcpConnection {
+            reader: tokio::io::BufReader::new(read_half),
+            writer: tokio::io::BufWriter::new(write_half),
+        }
+    }
+
+    /// BufReader への可変参照を返します
+    pub fn reader(&mut self) -> &mut tokio::io::BufReader<tokio::net::tcp::OwnedReadHalf> {
+        &mut self.reader
+    }
+    
+    /// BufWriter への可変参照を返します
+    pub fn writer(&mut self) -> &mut tokio::io::BufWriter<tokio::net::tcp::OwnedWriteHalf> {
+        &mut self.writer
     }
 }

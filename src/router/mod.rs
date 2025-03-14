@@ -26,7 +26,7 @@ use std::future::Future;
 use std::pin::Pin;
 
 /// 非同期関数を返すハンドラの型エイリアス
-pub type BoxedHandler = Box<dyn Fn(&mut Req, Res, Box<dyn Context>) -> Pin<Box<dyn Future<Output = Result<Res, HttpError>> + Send>> + Send + Sync>;
+pub type BoxedHandler = Box<dyn Fn(Req, Res, Box<dyn Context>) -> Pin<Box<dyn Future<Output = Result<Res, HttpError>> + Send>> + Send + Sync>;
 
 
 pub struct DefaultRouter {

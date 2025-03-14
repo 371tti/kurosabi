@@ -3,6 +3,7 @@ use log::{error, info, warn};
 use tokio::io::{AsyncBufReadExt, BufReader};
 
 use tokio::net::TcpStream;
+use tokio::sync::Mutex;
 
 use crate::error::HttpError;
 use crate::{context::{Context, DefaultContext}, error::KurosabiError, request::Req, response::Res, router::{BoxedHandler, DefaultRouter, GenRouter}, server::{worker::{Worker}, KurosabiServerBuilder, TcpConnection}, utils::header::Method};
@@ -40,12 +41,12 @@ where
     #[inline]
     fn register_route<F, Fut>(&mut self, method: Method, pattern: &str, handler: F)
     where
-        F: for<'a, 'b> Fn(&'a mut Req, Res, Box<dyn Context>) -> Fut + Send + Sync + 'static,
+        F: Fn(Req, Res, Box<dyn Context>) -> Fut + Send + Sync + 'static,
         Fut: std::future::Future<Output = Result<Res, HttpError>> + Send + 'static,
     {
         let boxed_handler: Box<
-            dyn for<'a, 'b> Fn(
-                &'a mut Req,
+            dyn Fn(
+                Req,
                 Res,
                 Box<dyn Context>,
             ) -> Pin<Box<dyn std::future::Future<Output = Result<Res, HttpError>> + Send + 'static>>
@@ -57,7 +58,7 @@ where
 
     pub fn get<F, Fut>(&mut self, pattern: &str, handler: F)
     where
-        F: for<'a, 'b> Fn(&'a mut Req, Res, Box<dyn Context>) -> Fut + Send + Sync + 'static,
+        F: Fn(Req, Res, Box<dyn Context>) -> Fut + Send + Sync + 'static,
         Fut: std::future::Future<Output = Result<Res, HttpError>> + Send + 'static,
     {
         self.register_route(Method::GET, pattern, handler);
@@ -65,7 +66,7 @@ where
 
     pub fn post<F, Fut>(&mut self, pattern: &str, handler: F)
     where
-        F: for<'a, 'b> Fn(&'a mut Req, Res, Box<dyn Context>) -> Fut + Send + Sync + 'static,
+        F: Fn(Req, Res, Box<dyn Context>) -> Fut + Send + Sync + 'static,
         Fut: std::future::Future<Output = Result<Res, HttpError>> + Send + 'static,
     {
         self.register_route(Method::POST, pattern, handler);
@@ -73,7 +74,7 @@ where
 
     pub fn put<F, Fut>(&mut self, pattern: &str, handler: F)
     where
-        F: for<'a, 'b> Fn(&'a mut Req, Res, Box<dyn Context>) -> Fut + Send + Sync + 'static,
+        F: Fn(Req, Res, Box<dyn Context>) -> Fut + Send + Sync + 'static,
         Fut: std::future::Future<Output = Result<Res, HttpError>> + Send + 'static,
     {
         self.register_route(Method::PUT, pattern, handler);
@@ -81,7 +82,7 @@ where
 
     pub fn delete<F, Fut>(&mut self, pattern: &str, handler: F)
     where
-        F: for<'a, 'b> Fn(&'a mut Req, Res, Box<dyn Context>) -> Fut + Send + Sync + 'static,
+        F: Fn(Req, Res, Box<dyn Context>) -> Fut + Send + Sync + 'static,
         Fut: std::future::Future<Output = Result<Res, HttpError>> + Send + 'static,
     {
         self.register_route(Method::DELETE, pattern, handler);
@@ -89,7 +90,7 @@ where
 
     pub fn patch<F, Fut>(&mut self, pattern: &str, handler: F)
     where
-        F: for<'a, 'b> Fn(&'a mut Req, Res, Box<dyn Context>) -> Fut + Send + Sync + 'static,
+        F: Fn(Req, Res, Box<dyn Context>) -> Fut + Send + Sync + 'static,
         Fut: std::future::Future<Output = Result<Res, HttpError>> + Send + 'static,
     {
         self.register_route(Method::PATCH, pattern, handler);
@@ -97,7 +98,7 @@ where
 
     pub fn options<F, Fut>(&mut self, pattern: &str, handler: F)
     where
-        F: for<'a, 'b> Fn(&'a mut Req, Res, Box<dyn Context>) -> Fut + Send + Sync + 'static,
+        F: Fn(Req, Res, Box<dyn Context>) -> Fut + Send + Sync + 'static,
         Fut: std::future::Future<Output = Result<Res, HttpError>> + Send + 'static,
     {
         self.register_route(Method::OPTIONS, pattern, handler);
@@ -105,7 +106,7 @@ where
 
     pub fn trace<F, Fut>(&mut self, pattern: &str, handler: F)
     where
-        F: for<'a, 'b> Fn(&'a mut Req, Res, Box<dyn Context>) -> Fut + Send + Sync + 'static,
+        F: Fn(Req, Res, Box<dyn Context>) -> Fut + Send + Sync + 'static,
         Fut: std::future::Future<Output = Result<Res, HttpError>> + Send + 'static,
     {
         self.register_route(Method::TRACE, pattern, handler);
@@ -113,7 +114,7 @@ where
 
     pub fn head<F, Fut>(&mut self, pattern: &str, handler: F)
     where
-        F: for<'a, 'b> Fn(&'a mut Req, Res, Box<dyn Context>) -> Fut + Send + Sync + 'static,
+        F: Fn(Req, Res, Box<dyn Context>) -> Fut + Send + Sync + 'static,
         Fut: std::future::Future<Output = Result<Res, HttpError>> + Send + 'static,
     {
         self.register_route(Method::HEAD, pattern, handler);
@@ -121,7 +122,7 @@ where
 
     pub fn connect<F, Fut>(&mut self, pattern: &str, handler: F)
     where
-        F: for<'a, 'b> Fn(&'a mut Req, Res, Box<dyn Context>) -> Fut + Send + Sync + 'static,
+        F: Fn(Req, Res, Box<dyn Context>) -> Fut + Send + Sync + 'static,
         Fut: std::future::Future<Output = Result<Res, HttpError>> + Send + 'static,
     {
         self.register_route(Method::CONNECT, pattern, handler);
@@ -129,7 +130,7 @@ where
 
     pub fn any<F, Fut>(&mut self, pattern: &str, handler: F)
     where
-        F: for<'a, 'b> Fn(&'a mut Req, Res, Box<dyn Context>) -> Fut + Send + Sync + 'static,
+        F: Fn(Req, Res, Box<dyn Context>) -> Fut + Send + Sync + 'static,
         Fut: std::future::Future<Output = Result<Res, HttpError>> + Send + 'static,
     {
         self.register_route(Method::UNKNOWN("OTHER".to_string()), pattern, handler);
@@ -163,9 +164,10 @@ where
         }
     }
 
-    async fn http_reader_head<'a>(reader: &'a mut BufReader<&'a mut TcpStream>) -> std::result::Result<Req<'a>, KurosabiError> {
-        let mut req = Req::new();
+    async fn http_reader_head(req: &mut Req) -> std::result::Result<(), KurosabiError> {
         let mut line_buf = String::with_capacity(1024);
+        let mut connection = req.connection.lock().await;
+        let mut reader = connection.reader();
 
         reader.read_line(&mut line_buf).await.map_err(KurosabiError::IoError)?;
 
@@ -192,7 +194,7 @@ where
             }
         }
 
-        Ok(req)
+        Ok(())
     }
 }
 
@@ -202,25 +204,26 @@ where
     C: Context + Clone,
     R: GenRouter<C, Arc<BoxedHandler>>,
 {
-    async fn execute(&self, mut connection: TcpConnection) {
-        let mut reader = BufReader::new(&mut connection.socket);
-        let mut req = match Self::http_reader_head(&mut reader).await {
-            Ok(req) => req,
-            Err(e) => {
-                error!("{:?}", e);
-                let mut res = Res::new();
-                res.code = 400;
-                res.text("Bad Request").write_out_connection(&mut connection.socket).await.unwrap();
-                return;
-            }
-        };
-
+    async fn execute(&self, connection: TcpConnection) {
+        let conn = Arc::new(Mutex::new(connection));
+        let mut req = Req::new(conn.clone());
+        if let Err(_e) = Self::http_reader_head(&mut req).await {
+            let e = HttpError::BadRequest("Invalid HTTP Header".to_string());
+            error!("{:?}", e);
+            let mut res = e.err_res();
+            warn!("{}- \x1b[33m{}\x1b[0m\n", "Invalid HTTP Header", res.code);
+            let mut locked_conn = conn.lock().await;
+            let writer = locked_conn.writer();
+            res.write_out_connection(writer).await.unwrap();
+            return;
+        }
+        
         let head_info = format!("{} {} {} ", req.method.to_str(), req.path.path, req.version);
-
-        let mut c = (*self.context).clone();
+        
+        let mut c: C = (*self.context).clone();
         if let Some(handler) = self.router.route(&mut req, &mut c) {
             let mut res = Res::new();
-            res = handler(&mut req, res, Box::new(c)).await.unwrap_or_else(|e| {
+            res = handler(req, res, Box::new(c)).await.unwrap_or_else(|e| {
                 error!("{:?}", e);
                 e.err_res()
             });
@@ -231,13 +234,17 @@ where
             } else {
                 info!("{}- \x1b[32m{}\x1b[0m\n", head_info, res.code);
             }
-            res.write_out_connection(&mut connection.socket).await.unwrap();
+            let mut locked_conn = conn.lock().await;
+            let mut writer = locked_conn.writer();
+            res.write_out_connection(&mut writer).await.unwrap();
         } else {
             let e = HttpError::NotFound;
             warn!("{:?}", e);
             let mut res = e.err_res();
             warn!("{}- \x1b[33m{}\x1b[0m\n", head_info, res.code);
-            res.write_out_connection(&mut connection.socket).await.unwrap();
+            let mut locked_conn = conn.lock().await;
+            let mut writer = locked_conn.writer();
+            res.write_out_connection(&mut writer).await.unwrap();
         }
     }
 }
