@@ -1,13 +1,12 @@
 use std::sync::Arc;
 
-use crate::context::Context;
 use crate::error::HttpError;
+use crate::kurosabi::Context;
 use crate::{context::DefaultContext, request::Req, response::Res, utils::header::Method};
 use regex::Regex;
 
-pub trait GenRouter<C, F>: Send + Sync
+pub trait GenRouter<F>: Send + Sync
 where 
-    C: Context + 'static,
     F: Send + Sync + 'static
 {
     /// ルーティングテーブルに登録する
@@ -18,7 +17,7 @@ where
     fn build(&mut self) -> ();
 
     /// ルーティングを行う
-    fn route(&self, req: &mut Req, context: &mut C) -> Option<F>;
+    fn route(&self, req: &mut Req) -> Option<F>;
 }
 
 
@@ -26,41 +25,55 @@ use std::future::Future;
 use std::pin::Pin;
 
 /// 非同期関数を返すハンドラの型エイリアス
-pub type BoxedHandler = Box<dyn Fn(Req, Res, Box<dyn Context>) -> Pin<Box<dyn Future<Output = Result<Res, HttpError>> + Send>> + Send + Sync>;
+pub type BoxedHandler<C> = Box<dyn Fn(Context<C>) -> Pin<Box<dyn Future<Output = Result<Context<C>, (Context<C>, HttpError)>> + Send>> + Send + Sync>;
 
 
-pub struct DefaultRouter {
-    table: Vec<(Regex, Arc<BoxedHandler>)>
+pub struct DefaultRouter<C> {
+    table: Vec<(Regex, Arc<BoxedHandler<C>>)>
 }
 
-impl DefaultRouter {
-    pub fn new() -> DefaultRouter {
+impl<C> DefaultRouter<C> {
+    pub fn new() -> DefaultRouter<C> {
         DefaultRouter {
             table: Vec::new()
         }
     }
 }
 
-impl GenRouter<DefaultContext<String>, Arc<BoxedHandler>> for DefaultRouter {
-    fn regist(&mut self, method: Method, pattern: &str, excuter: Arc<BoxedHandler>) {
+impl<C: 'static> GenRouter<Arc<BoxedHandler<C>>> for DefaultRouter<C> {
+    fn regist(&mut self, method: Method, pattern: &str, excuter: Arc<BoxedHandler<C>>) {
         let method_str = method.to_str();
-        let regex = Regex::new(pattern).unwrap();
+        let paragraph = pattern.split('/').map(|s| {
+            if s.starts_with(':') {
+                format!("(?P<{}>[^/]+)", &s[1..])
+            } else {
+                s.to_string()
+            }
+        }).collect::<Vec<String>>().join("/");
+        let regex_pattern = format!("^{} {}$", method_str, paragraph); // 末尾に $ を追加
+        let regex = Regex::new(&regex_pattern).unwrap();
         self.table.push((regex, excuter));
     }
 
     fn build(&mut self) -> () {
+        // ルーティングテーブルの構築処理を追加する場合はここに記述
     }
 
-    fn route(&self, req: &mut Req, context: &mut DefaultContext<String>) -> Option<Arc<BoxedHandler>> {
+    fn route(&self, req: &mut Req) -> Option<Arc<BoxedHandler<C>>> {
         let method = req.method.to_str();
         let path = req.path.path.clone();
-        
+        let target = format!("{} {}", method, path);
+
         for (regex, excuter) in &self.table {
-            if regex.is_match(&format!("{} {}", method, path)) {
+            if let Some(captures) = regex.captures(&target) {
+                for name in regex.capture_names().flatten() {
+                    if let Some(value) = captures.name(name) {
+                        req.path.set_field(name, value.as_str());
+                    }
+                }
                 return Some(Arc::clone(excuter));
             }
         }
-        
         None
     }
 }

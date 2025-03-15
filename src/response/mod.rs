@@ -16,33 +16,33 @@ pub struct Res {
 }
 
 impl Res {
-    pub fn text(mut self, text: &str) -> Self {
+    pub fn text(&mut self, text: &str) -> &mut Self {
         self.header.set("Content-Type", "text/plain");
         self.header.set("Content-Length", &text.len().to_string());
         self.body = Body::Text(text.to_string());
-        self // return self to allow method chaining
+        self
     }
 
-    pub fn html(mut self, text: &str) -> Self {
+    pub fn html(&mut self, text: &str) -> &mut Self {
         self.header.set("Content-Type", "text/html");
         self.header.set("Content-Length", &text.len().to_string());
         self.body = Body::Text(text.to_string());
-        self // return self to allow method chaining
+        self
     }
 
-    pub fn json(mut self, text: &str) -> Self {
+    pub fn json(&mut self, text: &str) -> &mut Self {
         self.header.set("Content-Type", "application/json");
         self.header.set("Content-Length", &text.len().to_string());
         self.body = Body::Text(text.to_string());
-        self // return self to allow method chaining
+        self
     }
 
-    pub fn stream(mut self, stream: Pin<Box<dyn AsyncRead + Send + Sync>>) -> Self {
+    pub fn stream(&mut self, stream: Pin<Box<dyn AsyncRead + Send + Sync>>) -> &mut Self {
         self.body = Body::Stream(stream);
-        self // return self to allow method chaining
+        self
     }
 
-    pub async fn file(mut self, req: &Req, file: &std::path::PathBuf) -> Result<Self, HttpError> {
+    pub async fn file(&mut self, req: &Req, file: &std::path::PathBuf) -> Result<&mut Self, HttpError> {
         self.header.set("Content-Type", "application/octet-stream");
         let metadata = file.metadata().map_err(|_| HttpError::InternalServerError)?;
         self.header.set("Content-Length", &metadata.len().to_string());
@@ -117,7 +117,8 @@ impl Res {
         }
     }
 
-    pub async fn write_out_connection(&mut self, writer: &mut tokio::io::BufWriter<tokio::net::tcp::OwnedWriteHalf>) -> Result<(), KurosabiError> {
+    pub async fn flush(&mut self, req: &mut Req) -> Result<(), KurosabiError> {
+        let writer = req.connection.writer();
         writer.write_all(format!("HTTP/1.1 {}\r\n", self.code).as_bytes()).await.map_err(|e| KurosabiError::IoError(e))?;
         for (key, value) in &self.header.headers {
             writer.write_all(format!("{}: {}\r\n", key, value).as_bytes()).await.map_err(|e| KurosabiError::IoError(e))?;

@@ -2,14 +2,6 @@ use std::sync::Arc;
 
 use dashmap::DashMap;
 
-pub trait Context: Send + Sync {
-    /// router がpathのフィールド解析情報を格納します
-    fn set_field(&mut self, key: &str, value: &str);
-
-    /// routerによって用意されたpathのフィールド解析情報を取得します
-    fn field(&self, key: &str) -> Option<String>;
-}
-
 #[derive(Clone)]
 pub struct DefaultContext<T> {
     data: Arc<DashMap<String, T>>,
@@ -25,17 +17,6 @@ impl<T> DefaultContext<T> {
     }
 }
 
-impl<T> Context for DefaultContext<T>
-where T: Send + Sync + Clone + 'static
-{
-    fn set_field(&mut self, key: &str, value: &str) {
-        self.field.push((key.to_string(), value.to_string()));
-    }
-
-    fn field(&self, key: &str) -> Option<String> {
-        self.field.iter().find(|(k, _)| k == key).map(|(_, v)| v.clone())
-    }
-}
 
 impl<T> DefaultContext<T>
 where

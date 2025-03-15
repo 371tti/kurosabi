@@ -3,7 +3,7 @@ pub mod worker;
 use std::{net::SocketAddr, sync::Arc};
 
 use socket2::{Domain, Protocol, Socket};
-use tokio::{self};
+use tokio::{self, io::AsyncWriteExt};
 use log::info;
 use worker::{Worker, WorkerPool};
 
@@ -142,5 +142,9 @@ impl TcpConnection {
     /// BufWriter への可変参照を返します
     pub fn writer(&mut self) -> &mut tokio::io::BufWriter<tokio::net::tcp::OwnedWriteHalf> {
         &mut self.writer
+    }
+
+    pub async fn close(&mut self) {
+        self.writer.shutdown().await.unwrap();
     }
 }

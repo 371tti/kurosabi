@@ -66,27 +66,27 @@ impl HttpError {
             HttpError::BadRequest(message) => {
                 res.set_status(400);
                 res.set_header("Content-Type", "text/plain");
-                res = res.text(format!("Bad Request: {}", message).as_str());
+                res.text(format!("Bad Request: {}", message).as_str());
             }
             HttpError::NotFound => {
                 res.set_status(404);
                 res.set_header("Content-Type", "text/plain");
-                res = res.text("Not Found");
+                res.text("Not Found");
             }
             HttpError::MethodNotAllowed => {
                 res.set_status(405);
                 res.set_header("Content-Type", "text/plain");
-                res = res.text("Method Not Allowed");
+                res.text("Method Not Allowed");
             }
             HttpError::InternalServerError => {
                 res.set_status(500);
                 res.set_header("Content-Type", "text/plain");
-                res = res.text("Internal Server Error");
+                res.text("Internal Server Error");
             }
             HttpError::CUSTOM(status, message) => {
                 res.set_status(*status);
                 res.set_header("Content-Type", "text/plain");
-                res = res.text(message);
+                res.text(message);
             }
         }
         res

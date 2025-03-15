@@ -1,31 +1,75 @@
 use std::sync::Arc;
 
-use tokio::{io::AsyncReadExt, sync::Mutex};
+use tokio::{io::{AsyncBufReadExt, AsyncReadExt}, sync::Mutex};
 
-use crate::{server::TcpConnection, utils::header::{Header, Method}};
+use crate::{error::KurosabiError, server::TcpConnection, utils::header::{Header, Method}};
 
 pub struct Req {
     pub method: Method,
     pub path: Path,
     pub header: Header,
     pub version: String,
-    pub connection: Arc<Mutex<TcpConnection>>
+    pub connection: TcpConnection,
 }
 
 impl Req {
-    pub fn new(connection: Arc<Mutex<TcpConnection>>) -> Req {
+    pub fn new(connection: TcpConnection) -> Req {
         Req {
-            method: Method::GET,
-            path: Path::new(),
+            method: Method::UNKNOWN("until parse".to_string()),
+            path: Path::new(""),
             header: Header::new(),
             version: String::new(),
-            connection,
+            connection: connection,
         }
     }
 
-    pub async fn body(&self) -> String {
+    pub async fn parse_headers(&mut self) -> Result<(), KurosabiError> {
+        let reader = self.connection.reader();
+        let mut line_buf = String::with_capacity(1024);
+
+        // Parse the request line first
+        reader
+            .read_line(&mut line_buf)
+            .await
+            .map_err(KurosabiError::IoError)?;
+        let parts: Vec<&str> = line_buf.trim().split_whitespace().collect();
+        if parts.len() < 3 {
+            return Err(KurosabiError::InvalidHttpHeader(line_buf));
+        }
+
+        let method = Method::from_str(parts[0]).unwrap();
+        let path = Path::new(parts[1]);
+        let version = parts[2].to_string();
+        let mut header = Header::new();
+
+        loop {
+            line_buf.clear();
+            reader
+                .read_line(&mut line_buf)
+                .await
+                .map_err(KurosabiError::IoError)?;
+            let trimmed = line_buf.trim();
+            if trimmed.is_empty() {
+                break;
+            }
+            if let Some((key, value)) = trimmed.split_once(": ") {
+                header.set(key, value);
+            } else {
+                return Err(KurosabiError::InvalidHttpHeader(line_buf));
+            }
+        }
+        self.method = method;
+        self.path = path;
+        self.header = header;
+        self.version = version;
+        Ok(())
+    }
+
+    pub async fn body(&mut self) -> String {
         let mut buf = String::new();
-        self.connection.lock().await.reader().read_to_string(&mut buf).await.unwrap();
+        let reader = self.connection.reader();
+        reader.read_to_string(&mut buf).await.unwrap();
+        let _ = reader;
         buf
     }
 }
@@ -37,14 +81,16 @@ pub struct Path {
     pub path: String,
     segments: Segments,
     query: Query,
+    fields: Vec<(String, String)>,
 }
 
 impl Path {
-    pub fn new() -> Path {
+    pub fn new(path: &str) -> Path {
         Path {
-            path: String::new(),
+            path: path.to_string(),
             segments: Segments::new(),
             query: Query::new(),
+            fields: Vec::new(),
         }
     }
 
@@ -85,6 +131,26 @@ impl Path {
                 }
             })
             .collect();
+    }
+
+    pub fn get_field(&mut self, key: &str) -> Option<String> {
+        self.fields.iter()
+            .find(|(k, _)| k == key)
+            .map(|(_, v)| v.clone())
+    }
+
+    pub fn set_field(&mut self, key: &str, value: &str) {
+        self.fields.push((key.to_string(), value.to_string()));
+        
+    }
+
+    pub fn remove_field(&mut self, key: &str) -> Option<String> {
+        if let Some(pos) = self.fields.iter().position(|(k, _)| k == key) {
+            let value = self.fields.remove(pos);
+            Some(value.1)
+        } else {
+            None
+        }
     }
 }
 

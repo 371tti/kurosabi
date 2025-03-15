@@ -1,4 +1,4 @@
-use kurosabi::{error::HttpError, kurosabi::Kurosabi};
+use kurosabi::{context::DefaultContext, error::HttpError, kurosabi::Kurosabi};
 
 #[tokio::main]
 async fn main() {
@@ -6,51 +6,53 @@ async fn main() {
 
     let mut kurosabi = Kurosabi::new();
 
-    kurosabi.get("/hello",  |req, res, c| async move {
-        let res = res.text("Hello, World!");
-        Ok(res)
+    kurosabi.get("/hello",  |mut c| async move {
+        c.res.text("Hello, World!");
+        Ok(c)
     });
 
-    kurosabi.get("/hello/:name",  |req, res, c| async move {
-        let name = c.field("name").unwrap();
-        let res = res.text(&format!("Hello, {}!", name));
-        Ok(res)
+    
+    kurosabi.get("/goodbye",  |mut c| async move {
+        c.res.text("Goodbye, World!");
+        Ok(c)
     });
 
-    kurosabi.get("/post_test", |req, res, c| async move {
-        let res = res.html(r#"
-            <html>
-                <head>
-                    <title>Post Test</title>
-                </head>
-                <body>
-                    <form action="/submit" method="post">
-                        <input type="text" name="name" />
-                        <input type="submit" value="Submit" />
-                    </form>
-                </body>
-            </html>
-        "#);
-        Ok(res)
+    kurosabi.get("/field/:name", |mut c| async move {
+        let message = format!("Field value: {}", c.req.path.get_field("name").unwrap_or("unknown".to_string()));
+        c.res.text(&message);
+        Ok(c)
     });
 
-    kurosabi.post("/submit",  |req, res, c| async move {
-        let body = req.body().await;
-        println!("Received: {}", body);
-        let res = res.html(&format!(
+    kurosabi.post("/submit", |mut c| async move {
+        let body = c.req.body().await;
+        println!("Body: {}", body);
+        c.res.text(format!("Submission received! Body: {}", body).as_str());
+        Ok(c)
+    });
+
+    kurosabi.get("/submit", |mut c| async move {
+        c.res.html(
             r#"
-                <html>
-                    <head>
-                        <title>Post Test</title>
-                    </head>
-                    <body>
-                        <p>Received: {}</p>
-                    </body>
-                </html>
-            "#,
-            body
-        ));
-        Ok(res)
+            <form method="post" action="/submit">
+                <input type="text" name="name" />
+                <input type="submit" value="Submit" />
+            </form>
+            "#
+        );
+        Ok(c)
+    });
+
+    kurosabi.get("/", |mut c| async move {
+        c.res.html(
+            r#"
+            <h1>Welcome to Kurosabi!</h1>
+            <p>Click <a href="/hello">here</a> to say hello!</p>
+            <p>Click <a href="/goodbye">here</a> to say goodbye!</p>
+            <p>Click <a href="/field/yourname">here</a> to see a field value!</p>
+            <p>Click <a href="/submit">here</a> to submit a form!</p>
+            "#
+        );
+        Ok(c)
     });
 
     let mut server = kurosabi.server()
