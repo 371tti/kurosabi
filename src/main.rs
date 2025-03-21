@@ -1,4 +1,4 @@
-use kurosabi::kurosabi::Kurosabi;
+use kurosabi::{context::DefaultContext, kurosabi::Kurosabi, router::DefaultRouter};
 
 #[tokio::main]
 async fn main() {
@@ -37,6 +37,12 @@ async fn main() {
     kurosabi.get("/gurd/*", |mut c| async move {
         let path = c.req.path.get_field("*").unwrap_or("unknown".to_string());
         c.res.text(&format!("Gurd: {}", path));
+        Ok(c)
+    });
+
+    kurosabi.get("json", |mut c| async move {
+        let json_data = r#"{"name": "Kurosabi", "version": "0.1"}"#;
+        c.res.json(json_data);
         Ok(c)
     });
 

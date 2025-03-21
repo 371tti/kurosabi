@@ -36,6 +36,14 @@ impl Res {
         self
     }
 
+    pub fn json_value(&mut self, value: &serde_json::Value) -> &mut Self {
+        self.header.set("Content-Type", "application/json");
+        let text = serde_json::to_string(value).unwrap();
+        self.header.set("Content-Length", &text.len().to_string());
+        self.body = Body::Text(text);
+        self
+    }
+
     pub fn stream(&mut self, stream: Pin<Box<dyn AsyncRead + Send + Sync>>) -> &mut Self {
         self.body = Body::Stream(stream);
         self
