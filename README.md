@@ -8,13 +8,21 @@ this framework design from "hono" of TypeScript web framework.
 "hono" is fire of japanese.  
 In other words, "kurosabi" is rust heated to "hono".
 
+## Installation
+Add the following dependency to your `Cargo.toml`:
+
+```toml
+[dependencies]
+kurosabi = "0.1"  // Use the latest version available
+```
+
 ## Usage
 Here's a detailed example to get started:
 
 ```rust
-// default set init
+// Initialized with the default router and context
 let mut kurosabi = Kurosabi::new();
-// let mut custom_kurosabi = Kurosabi::with_contex(...);
+// let mut custom_kurosabi = Kurosabi::with_context(...);
 ```
 
 ### Define Routes
