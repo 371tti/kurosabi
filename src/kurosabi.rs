@@ -28,7 +28,15 @@ where
     R: GenRouter<Arc<BoxedHandler<C>>> + 'static,
 {
     /// コンテキストとルーターを指定して初期化する
-    pub fn with_context(router: R, context: C) -> Kurosabi<C, R> {
+    pub fn with_context(context: C) -> Kurosabi<C, DefaultRouter<C>> {
+        Kurosabi {
+            router: DefaultRouter::new(),
+            context,
+        }
+    }
+
+    /// コンテキストとルーターを指定して初期化する
+    pub fn with_context_and_router(context: C, router: R) -> Kurosabi<C, R> {
         Kurosabi {
             router,
             context,
