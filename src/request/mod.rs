@@ -1,6 +1,8 @@
 
-use tokio::io::{AsyncBufReadExt, AsyncReadExt};
 
+use tokio::{io::{AsyncBufReadExt, AsyncReadExt, BufReader}, net::tcp::OwnedReadHalf};
+
+use serde_json;
 use crate::{error::{HttpError, KurosabiError}, server::TcpConnection, utils::header::{Header, Method}};
 
 pub struct Req {
@@ -64,13 +66,13 @@ impl Req {
         Ok(())
     }
 
-    pub async fn body(&mut self) -> Result<String, HttpError> {
+    pub async fn body(&mut self) -> Result<Vec<u8>, HttpError> {
         // Content-Length ヘッダーから本文のサイズを取得
         let content_length = if let Some(cl) = self.header.get("CONTENT-LENGTH") {
             cl.parse::<usize>().map_err(|_| HttpError::InvalidLength(cl.to_string()))?
         } else {
-            // Content-Lengthがない場合は空文字を返す
-            return Ok(String::new());
+            // Content-Lengthがない場合は空の Vec を返す
+            return Ok(Vec::new());
         };
     
         let mut buf = vec![0u8; content_length];
@@ -78,9 +80,27 @@ impl Req {
         // 指定サイズ分だけ読み込む
         reader.read_exact(&mut buf).await.map_err(|e| HttpError::InternalServerError(e.to_string()))?;
         
-        // バイト列を文字列に変換
-        Ok(String::from_utf8_lossy(&buf).into_owned())
+        // 読み込んだバイト列を Vec<u8> として返す
+        Ok(buf)
     }
+
+    pub async fn body_string(&mut self) -> Result<String, HttpError> {
+        let body = self.body().await?;
+        // Vec<u8> を String に変換
+        String::from_utf8(body).map_err(|e| HttpError::InternalServerError(e.to_string()))
+    }
+
+    pub async fn body_json(&mut self) -> Result<serde_json::Value, HttpError> {
+        let body = self.body_string().await?;
+        // JSON 文字列を serde_json::Value に変換
+        serde_json::from_str(&body).map_err(|e| HttpError::InternalServerError(e.to_string()))
+    }
+
+    pub async fn body_stream(&mut self) -> &mut BufReader<OwnedReadHalf> {
+        self.connection.reader()    
+    }
+
+
 }
 
 

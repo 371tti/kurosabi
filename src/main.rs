@@ -41,7 +41,7 @@ async fn main() {
     });
 
     kurosabi.post("/submit", |mut c| async move {
-        let body = match c.req.body().await {
+        let body = match c.req.body_string().await {
             Ok(body) => body,
             Err(e) => {
                 c.res = e.err_res();
