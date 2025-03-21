@@ -1,3 +1,7 @@
+
+# !! Currently under development !!
+# Please note that this content is incomplete.
+
 # 🔥kurosabi🔥
 
 kurosabi is a web framework that is extremely lightweight and simple, and makes use of rust's parallelism and safety.

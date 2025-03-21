@@ -69,6 +69,23 @@ async fn main() {
         Ok(c)
     });
 
+    kurosabi.get("/", |mut c| async move {
+        c.res.html(r#"
+        <h1>Welcome to Kurosabi!</h1>
+        <p>Try the following routes:</p>
+        <ul>
+            <li><a href="/hello">/hello</a></li>
+            <li><a href="/hello/John">/hello/John</a></li>
+            <li><a href="/json">/json</a></li>
+            <li><a href="/field/name/Kurosabi">/field/name/Kurosabi</a></li>
+            <li><a href="/gurd/some/path">/gurd/some/path</a></li>
+            <li><a href="/submit">/submit</a></li>
+            <li><a href="/gurd/*">/gurd/*</a></li>
+        </ul>
+        "#);
+        Ok(c)
+    });
+
 
     let mut server = kurosabi.server()
         .host([0, 0, 0, 0])

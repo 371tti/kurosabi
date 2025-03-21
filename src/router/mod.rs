@@ -49,27 +49,32 @@ impl<C: 'static> GenRouter<Arc<BoxedHandler<C>>> for DefaultRouter<C> {
             .filter(|s| !s.is_empty())
             .collect();
         let mut regex_str = String::new();
-        // ルーティング対象は "METHOD /path" 形式なので、先頭にスペースと"/"を付加
+        // ルーティング対象は "METHOD /path" 形式なので、先頭にスペースを付加
         regex_str.push_str(" ");
-        for segment in segments.iter() {
-            // セグメントごとに先頭の "/" を付加
+        // ルートパスの場合はセグメントが空なので、直接 "/" を追加
+        if segments.is_empty() {
             regex_str.push('/');
-            if segment.starts_with(':') {
-                if segment.ends_with('?') && segment.len() > 2 {
-                    // オプショナルパラメータ：例 "/:id?" → (?P<id>[^/]+)?
-                    let name = &segment[1..segment.len()-1];
-                    regex_str.push_str(&format!("(?P<{}>[^/]+)?", name));
+        } else {
+            // セグメントごとに先頭の "/" を付加
+            for segment in segments.iter() {
+                regex_str.push('/');
+                if segment.starts_with(':') {
+                    if segment.ends_with('?') && segment.len() > 2 {
+                        // オプショナルパラメータ：例 "/:id?" → (?P<id>[^/]+)?
+                        let name = &segment[1..segment.len()-1];
+                        regex_str.push_str(&format!("(?P<{}>[^/]+)?", name));
+                    } else {
+                        // 必須パラメータ：例 "/:id" → (?P<id>[^/]+)
+                        let name = &segment[1..];
+                        regex_str.push_str(&format!("(?P<{}>[^/]+)", name));
+                    }
+                } else if *segment == "*" {
+                    // ワイルドカード：内部では "wildcard" としてキャプチャし、後で "*" として設定する
+                    regex_str.push_str("(?P<wildcard>.*)");
                 } else {
-                    // 必須パラメータ：例 "/:id" → (?P<id>[^/]+)
-                    let name = &segment[1..];
-                    regex_str.push_str(&format!("(?P<{}>[^/]+)", name));
+                    // 固定パスセグメントは正規表現用にエスケープ
+                    regex_str.push_str(&regex::escape(segment));
                 }
-            } else if *segment == "*" {
-                // ワイルドカード：内部では "wildcard" としてキャプチャし、後で "*" として設定する
-                regex_str.push_str("(?P<wildcard>.*)");
-            } else {
-                // 固定パスセグメントは正規表現用にエスケープ
-                regex_str.push_str(&regex::escape(segment));
             }
         }
         
