@@ -2,7 +2,6 @@ use std::pin::Pin;
 
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncSeekExt};
 
-use tokio::{io::BufWriter, net::TcpStream};
 use tokio::io::AsyncWriteExt;
 
 use crate::error::HttpError;
@@ -44,7 +43,7 @@ impl Res {
 
     pub async fn file(&mut self, req: &Req, file: &std::path::PathBuf) -> Result<&mut Self, HttpError> {
         self.header.set("Content-Type", "application/octet-stream");
-        let metadata = file.metadata().map_err(|_| HttpError::InternalServerError)?;
+        let metadata = file.metadata().map_err(|_| HttpError::InternalServerError("Failed to retrieve file metadata".to_string()))?;
         self.header.set("Content-Length", &metadata.len().to_string());
         self.header.set("Content-Disposition", &format!("attachment; filename={}", file.file_name().unwrap().to_str().unwrap()));
         let raw_range = req.header.get("Range");
@@ -65,14 +64,14 @@ impl Res {
         };
         let mut f = tokio::fs::File::open(file)
             .await
-            .map_err(|_| HttpError::InternalServerError)?;
+            .map_err(|_| HttpError::InternalServerError("Failed to open file".to_string()))?;
         let metadata = f.metadata()
             .await
-            .map_err(|_| HttpError::InternalServerError)?;
+            .map_err(|_| HttpError::InternalServerError("Failed to retrieve file metadata".to_string()))?;
         let length = range.1 - range.0 + 1;
         f.seek(tokio::io::SeekFrom::Start(range.0))
             .await
-            .map_err(|_| HttpError::InternalServerError)?;
+            .map_err(|_| HttpError::InternalServerError("Failed to seek in file".to_string()))?;
         self.header.set("Content-Length", &length.to_string());
         self.header.set("Content-Range", &format!("bytes {}-{}/{}", range.0, range.1, metadata.len()));
         self.body = Body::Stream(Box::pin(f.take(length)));

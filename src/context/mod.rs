@@ -5,14 +5,12 @@ use dashmap::DashMap;
 #[derive(Clone)]
 pub struct DefaultContext<T> {
     data: Arc<DashMap<String, T>>,
-    field: Vec<(String, String)>,
 }
 
 impl<T> DefaultContext<T> {
     pub fn new() -> DefaultContext<T> {
         DefaultContext {
             data: Arc::new(DashMap::new()),
-            field: Vec::new(),
         }
     }
 }

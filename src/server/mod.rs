@@ -119,7 +119,6 @@ impl<W: Worker + 'static> KurosabiServer<W> {
 }
 
 pub struct TcpConnection {
-    
     pub reader: tokio::io::BufReader<tokio::net::tcp::OwnedReadHalf>,
     pub writer: tokio::io::BufWriter<tokio::net::tcp::OwnedWriteHalf>,
 }

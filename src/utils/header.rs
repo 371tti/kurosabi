@@ -14,24 +14,29 @@ impl Header {
     }
 
     pub fn set(&mut self, key: &str, value: &str) {
+        let key = key.to_ascii_uppercase();
         self.headers.push((key.to_string(), value.to_string()));
     }
 
     pub fn del(&mut self, key: &str) {
+        let key = key.to_ascii_uppercase();
         self.headers.retain(|(k, _)| k.to_ascii_uppercase() != key);
     }
 
     pub fn dels(&mut self, key: &str) {
+        let key = key.to_ascii_uppercase();
         self.headers.retain(|(k, _)| k.to_ascii_uppercase() != key);
     }
 
     /// ヘッダを取得する
     /// 任意のキーに対応するヘッダを線形探索します
     pub fn get(&self, key: &str) -> Option<&str> {
+        let key = key.to_ascii_uppercase();
         self.headers.iter().find(|(k, _)| k.to_ascii_uppercase() == key).map(|(_, v)| v.as_str())
     }
 
     pub fn gets(&self, key: &str) -> Vec<&str> {
+        let key = key.to_ascii_uppercase();
         self.headers.iter().filter(|(k, _)| k.to_ascii_uppercase() == key).map(|(_, v)| v.as_str()).collect()
     }
 
@@ -44,10 +49,12 @@ impl Header {
     }
 
     pub fn index(&self, key: &str) -> Option<usize> {
+        let key = key.to_ascii_uppercase();
         self.headers.iter().position(|(k, _)| k.to_ascii_uppercase() == key)
     }
 
     pub fn indexs(&self, key: &str) -> Vec<usize> {
+        let key = key.to_ascii_uppercase();
         self.headers.iter().enumerate().filter(|(_, (k, _))| k.to_ascii_uppercase() == key).map(|(i, _)| i).collect()
     }
 

@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::error::HttpError;
 use crate::kurosabi::Context;
-use crate::{context::DefaultContext, request::Req, response::Res, utils::header::Method};
+use crate::{request::Req, utils::header::Method};
 use regex::Regex;
 
 pub trait GenRouter<F>: Send + Sync
@@ -43,15 +43,39 @@ impl<C> DefaultRouter<C> {
 impl<C: 'static> GenRouter<Arc<BoxedHandler<C>>> for DefaultRouter<C> {
     fn regist(&mut self, method: Method, pattern: &str, excuter: Arc<BoxedHandler<C>>) {
         let method_str = method.to_str();
-        let paragraph = pattern.split('/').map(|s| {
-            if s.starts_with(':') {
-                format!("(?P<{}>[^/]+)", &s[1..])
+        
+        // パスの先頭の "/" を除去した上でセグメント毎に処理
+        let segments: Vec<&str> = pattern.split('/')
+            .filter(|s| !s.is_empty())
+            .collect();
+        let mut regex_str = String::new();
+        // ルーティング対象は "METHOD /path" 形式なので、先頭にスペースと"/"を付加
+        regex_str.push_str(" ");
+        for segment in segments.iter() {
+            // セグメントごとに先頭の "/" を付加
+            regex_str.push('/');
+            if segment.starts_with(':') {
+                if segment.ends_with('?') && segment.len() > 2 {
+                    // オプショナルパラメータ：例 "/:id?" → (?P<id>[^/]+)?
+                    let name = &segment[1..segment.len()-1];
+                    regex_str.push_str(&format!("(?P<{}>[^/]+)?", name));
+                } else {
+                    // 必須パラメータ：例 "/:id" → (?P<id>[^/]+)
+                    let name = &segment[1..];
+                    regex_str.push_str(&format!("(?P<{}>[^/]+)", name));
+                }
+            } else if *segment == "*" {
+                // ワイルドカード：内部では "wildcard" としてキャプチャし、後で "*" として設定する
+                regex_str.push_str("(?P<wildcard>.*)");
             } else {
-                s.to_string()
+                // 固定パスセグメントは正規表現用にエスケープ
+                regex_str.push_str(&regex::escape(segment));
             }
-        }).collect::<Vec<String>>().join("/");
-        let regex_pattern = format!("^{} {}$", method_str, paragraph); // 末尾に $ を追加
-        let regex = Regex::new(&regex_pattern).unwrap();
+        }
+        
+        // 全体の正規表現パターンは "METHOD" とスペース、その後にパスが続く形
+        let full_regex_pattern = format!("^{}{}$", method_str, regex_str);
+        let regex = Regex::new(&full_regex_pattern).unwrap();
         self.table.push((regex, excuter));
     }
 
@@ -68,7 +92,12 @@ impl<C: 'static> GenRouter<Arc<BoxedHandler<C>>> for DefaultRouter<C> {
             if let Some(captures) = regex.captures(&target) {
                 for name in regex.capture_names().flatten() {
                     if let Some(value) = captures.name(name) {
-                        req.path.set_field(name, value.as_str());
+                        if name == "wildcard" {
+                            // ワイルドカードキャプチャはキー "*" として保存
+                            req.path.set_field("*", value.as_str());
+                        } else {
+                            req.path.set_field(name, value.as_str());
+                        }
                     }
                 }
                 return Some(Arc::clone(excuter));

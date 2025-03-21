@@ -31,7 +31,8 @@ pub enum HttpError {
     BadRequest(String),
     NotFound,
     MethodNotAllowed,
-    InternalServerError,
+    InternalServerError(String),
+    InvalidLength(String),
     CUSTOM(u16, String),
 }
 
@@ -41,7 +42,8 @@ impl std::fmt::Display for HttpError {
             HttpError::BadRequest(message) => write!(f, "Bad Request: {}", message),
             HttpError::NotFound => write!(f, "Not Found"),
             HttpError::MethodNotAllowed => write!(f, "Method Not Allowed"),
-            HttpError::InternalServerError => write!(f, "Internal Server Error"),
+            HttpError::InternalServerError(message) => write!(f, "Internal Server Error: {}", message),
+            HttpError::InvalidLength(message) => write!(f, "Invalid Length: {}", message),
             HttpError::CUSTOM(status, message) => write!(f, "Status: {}, Message: {}", status, message),
         }
     }
@@ -53,7 +55,8 @@ impl std::fmt::Debug for HttpError {
             HttpError::BadRequest(message) =>           write!(f, "Bad Request: {}", message),
             HttpError::NotFound =>                               write!(f, "Not Found ============="),
             HttpError::MethodNotAllowed =>                       write!(f, "Method Not Allowed ===="),
-            HttpError::InternalServerError =>                    write!(f, "Internal Server Error ="),
+            HttpError::InternalServerError(message) =>          write!(f, "Internal Server Error: {}", message),
+            HttpError::InvalidLength(message) =>       write!(f, "Invalid Length: {}", message),
             HttpError::CUSTOM(status, message) => write!(f, "Status: {}, Message: {}", status, message),
         }
     }
@@ -78,10 +81,15 @@ impl HttpError {
                 res.set_header("Content-Type", "text/plain");
                 res.text("Method Not Allowed");
             }
-            HttpError::InternalServerError => {
+            HttpError::InternalServerError(message) => {
                 res.set_status(500);
                 res.set_header("Content-Type", "text/plain");
-                res.text("Internal Server Error");
+                res.text(format!("Internal Server Error: {}", message).as_str());
+            }
+            HttpError::InvalidLength(message) => {
+                res.set_status(416);
+                res.set_header("Content-Type", "text/plain");
+                res.text(format!("Invalid Length: {}", message).as_str());
             }
             HttpError::CUSTOM(status, message) => {
                 res.set_status(*status);

@@ -1,8 +1,7 @@
-use std::sync::Arc;
 
-use tokio::{io::{AsyncBufReadExt, AsyncReadExt}, sync::Mutex};
+use tokio::io::{AsyncBufReadExt, AsyncReadExt};
 
-use crate::{error::KurosabiError, server::TcpConnection, utils::header::{Header, Method}};
+use crate::{error::{HttpError, KurosabiError}, server::TcpConnection, utils::header::{Header, Method}};
 
 pub struct Req {
     pub method: Method,
@@ -65,12 +64,22 @@ impl Req {
         Ok(())
     }
 
-    pub async fn body(&mut self) -> String {
-        let mut buf = String::new();
+    pub async fn body(&mut self) -> Result<String, HttpError> {
+        // Content-Length ヘッダーから本文のサイズを取得
+        let content_length = if let Some(cl) = self.header.get("CONTENT-LENGTH") {
+            cl.parse::<usize>().map_err(|_| HttpError::InvalidLength(cl.to_string()))?
+        } else {
+            // Content-Lengthがない場合は空文字を返す
+            return Ok(String::new());
+        };
+    
+        let mut buf = vec![0u8; content_length];
         let reader = self.connection.reader();
-        reader.read_to_string(&mut buf).await.unwrap();
-        let _ = reader;
-        buf
+        // 指定サイズ分だけ読み込む
+        reader.read_exact(&mut buf).await.map_err(|e| HttpError::InternalServerError(e.to_string()))?;
+        
+        // バイト列を文字列に変換
+        Ok(String::from_utf8_lossy(&buf).into_owned())
     }
 }
 
