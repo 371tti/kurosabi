@@ -1,15 +1,31 @@
+use std::sync::Arc;
+
 use kurosabi::kurosabi::Kurosabi;
+
+pub struct MyContext {
+    pub name: String,
+}
+
+impl MyContext {
+    pub fn new(name: String) -> Self {
+        MyContext { name }
+    }
+}
 
 #[tokio::main]
 async fn main() {
     env_logger::builder().filter_level(log::LevelFilter::Info).init();
 
-    let mut kurosabi = Kurosabi::new();
+    let arc_context = Arc::new(MyContext::new("Kurosabi".to_string()));
+
+    let mut kurosabi = Kurosabi::with_context(arc_context);
 
     kurosabi.get("/hello",  |mut c| async move {
         c.res.text("Hello, World!");
-        c.res.set_cookie("session_id", "value");
-        c.res.set_header("X-Custom-Header", "MyValue");
+        let key = "session_id";
+        let value = "123456";
+        c.res.header.set_cookie(key, value);
+        c.res.header.set("X-Custom-Header", "MyValue");
         c.res.set_status(200);
         Ok(c)
     });
@@ -40,22 +56,17 @@ async fn main() {
         Ok(c)
     });
 
-    kurosabi.get("json", |mut c| async move {
-        let json_data = r#"{"name": "Kurosabi", "version": "0.1"}"#;
-        c.res.json(json_data);
-        Ok(c)
-    });
-
     kurosabi.post("/submit", |mut c| async move {
-        let body = match c.req.body_string().await {
-            Ok(body) => body,
+        let body = match c.req.body_form().await {
+            Ok(data) => data,
             Err(e) => {
-                c.res = e.err_res();
+                println!("Error receiving POST data: {}", e);
+                c.res.set_status(400);
                 return Ok(c);
             }
         };
-        println!("Received POST data: {}", body);
-        c.res.html(&format!("Received: {}", body));
+        println!("Received POST data: {:?}", body);
+        c.res.html(&format!("Received: {:?}", body));
         Ok(c)
     });
 
@@ -89,7 +100,7 @@ async fn main() {
 
     let mut server = kurosabi.server()
         .host([0, 0, 0, 0])
-        .port(80)
+        .port(85)
         .thread(4)
         .thread_name("kurosabi-worker".to_string())
         .queue_size(128)

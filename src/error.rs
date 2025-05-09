@@ -68,32 +68,32 @@ impl HttpError {
         match self {
             HttpError::BadRequest(message) => {
                 res.set_status(400);
-                res.set_header("Content-Type", "text/plain");
+                res.header.set("Content-Type", "text/plain");
                 res.text(format!("Bad Request: {}", message).as_str());
             }
             HttpError::NotFound => {
                 res.set_status(404);
-                res.set_header("Content-Type", "text/plain");
+                res.header.set("Content-Type", "text/plain");
                 res.text("Not Found");
             }
             HttpError::MethodNotAllowed => {
                 res.set_status(405);
-                res.set_header("Content-Type", "text/plain");
+                res.header.set("Content-Type", "text/plain");
                 res.text("Method Not Allowed");
             }
             HttpError::InternalServerError(message) => {
                 res.set_status(500);
-                res.set_header("Content-Type", "text/plain");
+                res.header.set("Content-Type", "text/plain");
                 res.text(format!("Internal Server Error: {}", message).as_str());
             }
             HttpError::InvalidLength(message) => {
                 res.set_status(416);
-                res.set_header("Content-Type", "text/plain");
+                res.header.set("Content-Type", "text/plain");
                 res.text(format!("Invalid Length: {}", message).as_str());
             }
             HttpError::CUSTOM(status, message) => {
                 res.set_status(*status);
-                res.set_header("Content-Type", "text/plain");
+                res.header.set("Content-Type", "text/plain");
                 res.text(message);
             }
         }

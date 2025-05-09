@@ -2,8 +2,8 @@ use std::{pin::Pin, sync::Arc};
 use log::{error, info, warn};
 
 use crate::error::HttpError;
-use crate::{context::DefaultContext, request::Req, response::Res, router::{BoxedHandler, DefaultRouter, GenRouter}, server::{worker::Worker, KurosabiServerBuilder, TcpConnection}, utils::header::Method};
-
+use crate::{context::DefaultContext, request::Req, response::Res, router::{BoxedHandler, DefaultRouter, GenRouter}, server::{worker::Worker, KurosabiServerBuilder, TcpConnection}};
+use crate::utils::method::Method;
 pub struct Kurosabi<C, R>
 where
     C: Clone + 'static,
@@ -22,19 +22,24 @@ impl Kurosabi<DefaultContext<String>, DefaultRouter<DefaultContext<String>>> {
     }
 }
 
-impl<C, R> Kurosabi<C, R>
+impl<C> Kurosabi<C, DefaultRouter<C>>
 where
     C: Clone + Sync + Send + 'static,
-    R: GenRouter<Arc<BoxedHandler<C>>> + 'static,
 {
-    /// コンテキストとルーターを指定して初期化する
+    /// コンテキストを指定して初期化する
     pub fn with_context(context: C) -> Kurosabi<C, DefaultRouter<C>> {
         Kurosabi {
             router: DefaultRouter::new(),
             context,
         }
     }
+}
 
+impl<C, R> Kurosabi<C, R>
+where
+    C: Clone + Sync + Send + 'static,
+    R: GenRouter<Arc<BoxedHandler<C>>> + 'static,
+{
     /// コンテキストとルーターを指定して初期化する
     pub fn with_context_and_router(context: C, router: R) -> Kurosabi<C, R> {
         Kurosabi {
@@ -173,7 +178,7 @@ where
 pub struct Context<C> {
     pub req: Req,
     pub res: Res,
-    pub ctx: Box<C>,
+    pub c: Box<C>,
 }
 
 #[async_trait::async_trait]
@@ -183,28 +188,30 @@ where
     R: GenRouter<Arc<BoxedHandler<C>>>,
 {
     async fn execute(&self, connection: TcpConnection) {
-        // Req は内部に TCP 接続を保持していると仮定
+        // Req は内部に TCP 接続を保持つ
         let mut req = Req::new(connection);
         
         loop {
+            // 新しいリクエストが来るまで待機
             // HTTPリクエストのヘッダーをパース
             if let Err(e) = req.parse_headers().await {
                 error!("Failed to parse headers: {:?}", e);
                 break;
             }
-            
             let method = req.method.to_str();
             let path = req.path.path.clone();
             let version = req.version.clone();
             let head_info = format!("{} {} {} ", method, path, version);
             
+            // コンテキストをクローン
             let context_data: C = (*self.context).clone();
+            // ルーティング
             if let Some(handler) = self.router.route(&mut req) {
                 let res = Res::new();
                 let mut context = Context {
                     req,
                     res,
-                    ctx: Box::new(context_data),
+                    c: Box::new(context_data),
                 };
                 
                 let mut err = HttpError::InternalServerError("http server error".to_string());

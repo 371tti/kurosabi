@@ -1,15 +1,23 @@
+pub mod path;
 
-
+use path::Path;
 use tokio::{io::{AsyncBufReadExt, AsyncReadExt, BufReader}, net::tcp::OwnedReadHalf};
 
 use serde_json;
-use crate::{error::{HttpError, KurosabiError}, server::TcpConnection, utils::header::{Header, Method}};
+use crate::{error::{HttpError, KurosabiError}, server::TcpConnection, utils::header::Header};
+use crate::utils::method::Method;
 
 pub struct Req {
+    /// HTTPメソッド
+    /// GET, POST, PUT, DELETE, HEAD, OPTIONS, PATCH...
     pub method: Method,
+    /// リクエストパス
     pub path: Path,
+    /// HTTPヘッダ
     pub header: Header,
+    /// HTTPバージョン
     pub version: String,
+    /// 接続
     pub connection: TcpConnection,
 }
 
@@ -24,6 +32,7 @@ impl Req {
         }
     }
 
+    /// httpリクエストのヘッダを最低限パースする
     pub async fn parse_headers(&mut self) -> Result<(), KurosabiError> {
         let reader = self.connection.reader();
         let mut line_buf = String::with_capacity(1024);
@@ -66,6 +75,8 @@ impl Req {
         Ok(())
     }
 
+    /// HTTPリクエストのボディをバイナリとして取得する
+    /// Content-Length ヘッダーを使用して、指定されたサイズ分だけ読み込む
     pub async fn body(&mut self) -> Result<Vec<u8>, HttpError> {
         // Content-Length ヘッダーから本文のサイズを取得
         let content_length = if let Some(cl) = self.header.get("CONTENT-LENGTH") {
@@ -84,73 +95,27 @@ impl Req {
         Ok(buf)
     }
 
+    /// HTTPリクエストのボディを文字列として取得する
+    /// UTF-8 でデコードする
     pub async fn body_string(&mut self) -> Result<String, HttpError> {
         let body = self.body().await?;
         // Vec<u8> を String に変換
         String::from_utf8(body).map_err(|e| HttpError::InternalServerError(e.to_string()))
     }
 
+    /// HTTPリクエストのボディを JSON として取得する
+    /// serde_json::Value に変換する
     pub async fn body_json(&mut self) -> Result<serde_json::Value, HttpError> {
         let body = self.body_string().await?;
         // JSON 文字列を serde_json::Value に変換
         serde_json::from_str(&body).map_err(|e| HttpError::InternalServerError(e.to_string()))
     }
 
-    pub async fn body_stream(&mut self) -> &mut BufReader<OwnedReadHalf> {
-        self.connection.reader()    
-    }
-
-
-}
-
-
-pub struct Path {
-    /// パスの文字列(完全)を保持
-    /// 遅延処理をする
-    pub path: String,
-    segments: Segments,
-    query: Query,
-    fields: Vec<(String, String)>,
-}
-
-impl Path {
-    pub fn new(path: &str) -> Path {
-        Path {
-            path: path.to_string(),
-            segments: Segments::new(),
-            query: Query::new(),
-            fields: Vec::new(),
-        }
-    }
-
-    pub fn get_raw_path(&self) -> &str {
-        &self.path
-    }   
-
-    pub fn get_path(&mut self) -> String {
-        self.dec_segment();
-        self.segments.segments.join("/")
-    }
-
-    pub fn get_query(&mut self, key: &str) -> Option<String> {
-        self.dec_query();
-        self.query.query.iter()
-            .find(|(k, _)| k == key)
-            .map(|(_, v)| v.clone())
-    }
-
-    fn dec_segment(&mut self) {
-        self.segments.segments = self.path.split('/')
-            .filter(|s| !s.is_empty())
-            .map(String::from)
-            .collect();
-    }
-
-    fn dec_query(&mut self) {
-        self.query.query = self.path.split('?')
-            .nth(1)
-            .unwrap_or("")
-            .split('&')
+    /// HTTPリクエストのボディをformデータとして取得する
+    pub async fn body_form(&mut self) -> Result<Vec<(String, String)>, HttpError> {
+        let body = self.body_string().await?;
+        // フォームデータを Vec<(String, String)> に変換
+        let form_data: Vec<(String, String)> = body.split('&')
             .filter_map(|s| {
                 let mut iter = s.splitn(2, '=');
                 if let (Some(key), Some(value)) = (iter.next(), iter.next()) {
@@ -160,49 +125,14 @@ impl Path {
                 }
             })
             .collect();
+        Ok(form_data)
     }
 
-    pub fn get_field(&mut self, key: &str) -> Option<String> {
-        self.fields.iter()
-            .find(|(k, _)| k == key)
-            .map(|(_, v)| v.clone())
-    }
-
-    pub fn set_field(&mut self, key: &str, value: &str) {
-        self.fields.push((key.to_string(), value.to_string()));
-        
-    }
-
-    pub fn remove_field(&mut self, key: &str) -> Option<String> {
-        if let Some(pos) = self.fields.iter().position(|(k, _)| k == key) {
-            let value = self.fields.remove(pos);
-            Some(value.1)
-        } else {
-            None
-        }
+    /// HTTPリクエストのボディをストリームとして取得する
+    /// BufReader を使用して、非同期に読み込む
+    pub async fn body_stream(&mut self) -> &mut BufReader<OwnedReadHalf> {
+        self.connection.reader()    
     }
 }
 
-pub struct Segments {
-    pub segments: Vec<String>,
-}
 
-impl Segments {
-    pub fn new() -> Segments {
-        Segments {
-            segments: Vec::new(),
-        }
-    }
-}
-
-pub struct Query {
-    pub query: Vec<(String, String)>,
-}
-
-impl Query {
-    pub fn new() -> Query {
-        Query {
-            query: Vec::new(),
-        }
-    }
-}

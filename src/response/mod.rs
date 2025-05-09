@@ -9,12 +9,17 @@ use crate::request::Req;
 use crate::{error::KurosabiError, utils::header::Header};
 
 pub struct Res {
+    /// ステータスコード
     pub code: u16,
+    /// ヘッダ
     pub header: Header,
+    /// ボディ
     pub body: Body,
 }
 
+/// レスポンス構築するやつ
 impl Res {
+    /// テキストレスポンス
     pub fn text(&mut self, text: &str) -> &mut Self {
         self.header.set("Content-Type", "text/plain");
         self.header.set("Content-Length", &text.len().to_string());
@@ -22,6 +27,7 @@ impl Res {
         self
     }
 
+    /// HTMLレスポンス
     pub fn html(&mut self, text: &str) -> &mut Self {
         self.header.set("Content-Type", "text/html");
         self.header.set("Content-Length", &text.len().to_string());
@@ -29,6 +35,7 @@ impl Res {
         self
     }
 
+    /// JSONレスポンス
     pub fn json(&mut self, text: &str) -> &mut Self {
         self.header.set("Content-Type", "application/json");
         self.header.set("Content-Length", &text.len().to_string());
@@ -36,6 +43,7 @@ impl Res {
         self
     }
 
+    /// JSONレスポンス
     pub fn json_value(&mut self, value: &serde_json::Value) -> &mut Self {
         self.header.set("Content-Type", "application/json");
         let text = serde_json::to_string(value).unwrap();
@@ -44,11 +52,23 @@ impl Res {
         self
     }
 
+    /// バイナリレスポンス
+    pub fn binary(&mut self, data: &[u8]) -> &mut Self {
+        self.header.set("Content-Type", "application/octet-stream");
+        self.header.set("Content-Length", &data.len().to_string());
+        self.body = Body::Text(String::from_utf8_lossy(data).to_string());
+        self
+    }
+
+    /// ストリームレスポンス
+    /// ストリームレスポンスは、AsyncReadを実装したストリームを指定する
     pub fn stream(&mut self, stream: Pin<Box<dyn AsyncRead + Send + Sync>>) -> &mut Self {
         self.body = Body::Stream(stream);
         self
     }
 
+    /// ファイルレスポンス
+    /// ファイルレスポンスは、ファイルを指定する
     pub async fn file(&mut self, req: &Req, file: &std::path::PathBuf) -> Result<&mut Self, HttpError> {
         self.header.set("Content-Type", "application/octet-stream");
         let metadata = file.metadata().map_err(|_| HttpError::InternalServerError("Failed to retrieve file metadata".to_string()))?;
@@ -88,30 +108,9 @@ impl Res {
 }
 
 impl Res {
-    pub fn set_cookie(&mut self, key: &str, value: &str) {
-        self.header.set("Set-Cookie", &format!("{}={}", key, value));
-    }
-
-    pub fn del_cookie(&mut self, key: &str) {
-        let indexs = self.header.indexs("Set-Cookie");
-        for i in indexs {
-            let (_, v) = self.header.headers[i].clone();
-            if v.starts_with(&format!("{}=", key)) {
-                self.header.index_del(i);
-            }
-        }
-    }
-
+    /// ステータスコードをセットする
     pub fn set_status(&mut self, code: u16) {
         self.code = code;
-    }
-
-    pub fn set_header(&mut self, key: &str, value: &str) {
-        self.header.set(key, value);
-    }
-
-    pub fn del_header(&mut self, key: &str) {
-        self.header.del(key);
     }
 }
 

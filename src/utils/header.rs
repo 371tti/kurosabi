@@ -1,11 +1,13 @@
 /// HTTPリクエストのヘッダ
 /// 現行のHTTP/1.1の仕様に準拠
+/// HTTP解析時にパースされる
 pub struct Header {
     /// ヘッダのキーと値のペア
     /// リニアサーチの方が早い
     pub headers: Vec<(String, String)>,
 }
 
+/// 汎用な操作
 impl Header {
     pub fn new() -> Header {
         Header {
@@ -13,16 +15,20 @@ impl Header {
         }
     }
 
+    /// ヘッダを追加する
     pub fn set(&mut self, key: &str, value: &str) {
         let key = key.to_ascii_uppercase();
         self.headers.push((key.to_string(), value.to_string()));
     }
 
+    /// ヘッダを削除する
     pub fn del(&mut self, key: &str) {
         let key = key.to_ascii_uppercase();
         self.headers.retain(|(k, _)| k.to_ascii_uppercase() != key);
     }
 
+    /// ヘッダを削除する
+    /// 複数ある場合は、全て削除します
     pub fn dels(&mut self, key: &str) {
         let key = key.to_ascii_uppercase();
         self.headers.retain(|(k, _)| k.to_ascii_uppercase() != key);
@@ -35,29 +41,42 @@ impl Header {
         self.headers.iter().find(|(k, _)| k.to_ascii_uppercase() == key).map(|(_, v)| v.as_str())
     }
 
+    /// ヘッダを取得する
+    /// 任意のキーに対応するヘッダを線形探索します
+    /// 複数の値を持つ場合は、Vecで返します
     pub fn gets(&self, key: &str) -> Vec<&str> {
         let key = key.to_ascii_uppercase();
         self.headers.iter().filter(|(k, _)| k.to_ascii_uppercase() == key).map(|(_, v)| v.as_str()).collect()
     }
 
+    /// indexのヘッダを取得する
     pub fn index_get(&self, index: usize) -> Option<(&str, &str)> {
         self.headers.get(index).map(|(k, v)| (k.as_str(), v.as_str()))
     }
 
+    /// indexのヘッダを削除する
     pub fn index_del(&mut self, index: usize) {
         self.headers.remove(index);
     }
 
+    /// ヘッダのインデックスを取得する
+    /// 任意のキーに対応するヘッダを線形探索します
     pub fn index(&self, key: &str) -> Option<usize> {
         let key = key.to_ascii_uppercase();
         self.headers.iter().position(|(k, _)| k.to_ascii_uppercase() == key)
     }
 
+    /// ヘッダのインデックスを取得する
+    /// 任意のキーに対応するヘッダを線形探索します
+    /// 複数の値を持つ場合は、Vecで返します
     pub fn indexs(&self, key: &str) -> Vec<usize> {
         let key = key.to_ascii_uppercase();
         self.headers.iter().enumerate().filter(|(_, (k, _))| k.to_ascii_uppercase() == key).map(|(i, _)| i).collect()
     }
+}
 
+/// HTTPヘッダの操作
+impl Header {
     /// head: host を取得する
     pub fn get_host(&self) -> Option<&str> {
         self.get("HOST")
@@ -96,11 +115,6 @@ impl Header {
         self.get("REFERER")
     }
 
-    /// head: get_cookie を取得する
-    pub fn get_cookie(&self) -> Option<&str> {
-        self.get("COOKIE")
-    }
-
     /// head: get_content_length を取得する
     /// リクエストボディの長さを取得する
     pub fn get_content_length(&self) -> Option<&str> {
@@ -118,78 +132,26 @@ impl Header {
     }
 }
 
-/// HTTPヘッダのenum
-/// 現行のHTTP/1.1の仕様に準拠
-pub enum Method {
-    /// GETメソッド
-    /// cash_able: yes
-    GET,
-
-    /// POSTメソッド
-    /// cash_able: conditional
-    POST,
-
-    /// HEADメソッド
-    /// cash_able: yes
-    HEAD,
-
-    /// PUTメソッド
-    /// cash_able: no
-    PUT,
-
-    /// DELETEメソッド
-    /// cash_able: no
-    DELETE,
-
-    /// OPTIONSメソッド
-    /// cash_able: no
-    OPTIONS,
-
-    /// TRACEメソッド
-    /// cash_able: no
-    TRACE,
-
-    /// CONNECTメソッド
-    /// cash_able: no
-    CONNECT,
-
-    /// PATCHメソッド
-    /// cash_able: conditional
-    PATCH,
-
-    /// カスタム
-    UNKNOWN(String),
-}
-
-impl Method {
-    /// 文字列からMethodを取得する
-    pub fn from_str(method: &str) -> Option<Method> {
-        match method {
-            "GET" => Some(Method::GET),
-            "POST" => Some(Method::POST),
-            "HEAD" => Some(Method::HEAD),
-            "PUT" => Some(Method::PUT),
-            "DELETE" => Some(Method::DELETE),
-            "OPTIONS" => Some(Method::OPTIONS),
-            "TRACE" => Some(Method::TRACE),
-            "CONNECT" => Some(Method::CONNECT),
-            "PATCH" => Some(Method::PATCH),
-            method => Some(Method::UNKNOWN(method.to_string())),
-        }
+/// クッキーの操作
+impl Header {
+    /// head: get_cookie を取得する
+    pub fn get_cookie(&self) -> Option<&str> {
+        self.get("COOKIE")
     }
 
-    pub fn to_str(&self) -> &str {
-        match self {
-            Method::GET => "GET",
-            Method::POST => "POST",
-            Method::HEAD => "HEAD",
-            Method::PUT => "PUT",
-            Method::DELETE => "DELETE",
-            Method::OPTIONS => "OPTIONS",
-            Method::TRACE => "TRACE",
-            Method::CONNECT => "CONNECT",
-            Method::PATCH => "PATCH",
-            Method::UNKNOWN(method) => method,
+    /// head: set_cookie をセットする
+    pub fn set_cookie(&mut self, key: &str, value: &str) {
+        self.set("Set-Cookie", &format!("{}={}", key, value));
+    }
+
+    /// head: del_cookie を削除する
+    pub fn del_cookie(&mut self, key: &str) {
+        let indexs = self.indexs("Set-Cookie");
+        for i in indexs {
+            let (_, v) = self.index_get(i).unwrap();
+            if v.starts_with(&format!("{}=", key)) {
+                self.index_del(i);
+            }
         }
     }
 }
