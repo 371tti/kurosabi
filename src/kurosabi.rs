@@ -281,6 +281,7 @@ where
 }
 
 /// 接続を閉じるか判断するための例
+#[inline]
 fn should_close_connection(req: &Req, res: &Res) -> bool {
     // HTTP/1.0の場合、明示的なKeep-Aliveがなければclose
     if req.version == "HTTP/1.0" && !req.header.get_connection().unwrap_or("close").eq_ignore_ascii_case("keep-alive") {

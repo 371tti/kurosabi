@@ -44,6 +44,7 @@ pub enum Method {
 
 impl Method {
     /// 文字列からMethodを取得する
+    #[inline]
     pub fn from_str(method: &str) -> Option<Method> {
         match method {
             "GET" => Some(Method::GET),
@@ -59,6 +60,7 @@ impl Method {
         }
     }
 
+    #[inline]
     pub fn to_str(&self) -> &str {
         match self {
             Method::GET => "GET",
@@ -76,6 +78,7 @@ impl Method {
 }
 
 impl std::fmt::Display for Method {
+    #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.to_str())
     }

@@ -20,6 +20,7 @@ pub struct Res {
 /// レスポンス構築するやつ
 impl Res {
     /// テキストレスポンス
+    #[inline]
     pub fn text(&mut self, text: &str) -> &mut Self {
         self.header.set("Content-Type", "text/plain");
         self.header.set("Content-Length", &text.len().to_string());
@@ -28,6 +29,7 @@ impl Res {
     }
 
     /// HTMLレスポンス
+    #[inline]
     pub fn html(&mut self, text: &str) -> &mut Self {
         self.header.set("Content-Type", "text/html");
         self.header.set("Content-Length", &text.len().to_string());
@@ -36,6 +38,7 @@ impl Res {
     }
 
     /// JSONレスポンス
+    #[inline]
     pub fn json(&mut self, text: &str) -> &mut Self {
         self.header.set("Content-Type", "application/json");
         self.header.set("Content-Length", &text.len().to_string());
@@ -44,6 +47,7 @@ impl Res {
     }
 
     /// JSONレスポンス
+    #[inline]
     pub fn json_value(&mut self, value: &serde_json::Value) -> &mut Self {
         self.header.set("Content-Type", "application/json");
         let text = serde_json::to_string(value).unwrap();
@@ -53,6 +57,7 @@ impl Res {
     }
 
     /// バイナリレスポンス
+    #[inline]
     pub fn binary(&mut self, data: &[u8]) -> &mut Self {
         self.header.set("Content-Type", "application/octet-stream");
         self.header.set("Content-Length", &data.len().to_string());
@@ -62,6 +67,7 @@ impl Res {
 
     /// ストリームレスポンス
     /// ストリームレスポンスは、AsyncReadを実装したストリームを指定する
+    #[inline]
     pub fn stream(&mut self, stream: Pin<Box<dyn AsyncRead + Send + Sync>>) -> &mut Self {
         self.body = Body::Stream(stream);
         self
@@ -69,6 +75,7 @@ impl Res {
 
     /// ファイルレスポンス
     /// ファイルレスポンスは、ファイルを指定する
+    #[inline]
     pub async fn file(&mut self, req: &Req, file: &std::path::PathBuf) -> Result<&mut Self, HttpError> {
         self.header.set("Content-Type", "application/octet-stream");
         let metadata = file.metadata().map_err(|_| HttpError::InternalServerError("Failed to retrieve file metadata".to_string()))?;
@@ -109,12 +116,14 @@ impl Res {
 
 impl Res {
     /// ステータスコードをセットする
+    #[inline]
     pub fn set_status(&mut self, code: u16) {
         self.code = code;
     }
 }
 
 impl Res {
+    #[inline]
     pub fn new() -> Res {
         Res {
             code: 200,
@@ -123,6 +132,7 @@ impl Res {
         }
     }
 
+    #[inline]
     pub async fn flush(&mut self, req: &mut Req) -> Result<(), KurosabiError> {
         let writer = req.connection.writer();
         writer.write_all(format!("HTTP/1.1 {}\r\n", self.code).as_bytes()).await.map_err(|e| KurosabiError::IoError(e))?;

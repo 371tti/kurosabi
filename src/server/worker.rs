@@ -21,6 +21,7 @@ impl<W: Worker> WorkerPool<W> {
         }
     }
 
+    #[inline]
     pub async fn main_loop(self: Arc<Self>) {
         loop {
             // タスクキューからコネクションを取り出して処理する
@@ -34,11 +35,13 @@ impl<W: Worker> WorkerPool<W> {
         }
     }
 
+    #[inline]
     async fn handle_connection(&self, connection: TcpConnection) {
         // ここでリクエストを処理する
         self.worker.execute(connection).await;
     }
 
+    #[inline]
     pub async fn assign_connection(&self, connection: TcpConnection) {
         if self.task_queue.push(connection).is_ok() {
             self.notifier.notify_one();
@@ -47,6 +50,7 @@ impl<W: Worker> WorkerPool<W> {
         }
     }
 
+    #[inline]
     pub fn notifier(&self) -> Arc<Notify> {
         Arc::clone(&self.notifier)
     }

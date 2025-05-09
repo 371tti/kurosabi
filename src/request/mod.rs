@@ -22,6 +22,7 @@ pub struct Req {
 }
 
 impl Req {
+    #[inline]
     pub fn new(connection: TcpConnection) -> Req {
         Req {
             method: Method::UNKNOWN("until parse".to_string()),
@@ -32,6 +33,7 @@ impl Req {
         }
     }
 
+    #[inline]
     pub async fn wait_request(&mut self) -> Result<(), KurosabiError> {
         // 接続を待機し、何か受け取るまで待つ
         let reader = self.connection.reader();
@@ -47,6 +49,7 @@ impl Req {
     }
 
     /// httpリクエストのヘッダを最低限パースする
+    #[inline]
     pub async fn parse_headers(&mut self) -> Result<(), KurosabiError> {
         let reader = self.connection.reader();
         let mut line_buf = String::with_capacity(1024);
@@ -91,6 +94,7 @@ impl Req {
 
     /// HTTPリクエストのボディをバイナリとして取得する
     /// Content-Length ヘッダーを使用して、指定されたサイズ分だけ読み込む
+    #[inline]
     pub async fn body(&mut self) -> Result<Vec<u8>, HttpError> {
         // Content-Length ヘッダーから本文のサイズを取得
         let content_length = if let Some(cl) = self.header.get("CONTENT-LENGTH") {
@@ -111,6 +115,7 @@ impl Req {
 
     /// HTTPリクエストのボディを文字列として取得する
     /// UTF-8 でデコードする
+    #[inline]
     pub async fn body_string(&mut self) -> Result<String, HttpError> {
         let body = self.body().await?;
         // Vec<u8> を String に変換
@@ -119,6 +124,7 @@ impl Req {
 
     /// HTTPリクエストのボディを JSON として取得する
     /// serde_json::Value に変換する
+    #[inline]
     pub async fn body_json(&mut self) -> Result<serde_json::Value, HttpError> {
         let body = self.body_string().await?;
         // JSON 文字列を serde_json::Value に変換
@@ -126,6 +132,7 @@ impl Req {
     }
 
     /// HTTPリクエストのボディをformデータとして取得する
+    #[inline]
     pub async fn body_form(&mut self) -> Result<Vec<(String, String)>, HttpError> {
         let body = self.body_string().await?;
         // フォームデータを Vec<(String, String)> に変換
@@ -144,9 +151,8 @@ impl Req {
 
     /// HTTPリクエストのボディをストリームとして取得する
     /// BufReader を使用して、非同期に読み込む
+    #[inline]
     pub async fn body_stream(&mut self) -> &mut BufReader<OwnedReadHalf> {
         self.connection.reader()    
     }
 }
-
-

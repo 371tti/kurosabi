@@ -199,6 +199,7 @@ impl<C: 'static> GenRouter<Arc<BoxedHandler<C>>> for DefaultRouter<C> {
     }
 
     /*----- route ----------------------------------------------------------*/
+    #[inline]
     fn route(&self, req: &mut Req) -> Option<Arc<BoxedHandler<C>>> {
         let mut node = self.trees.get(&req.method)?.as_ref();
         let path = req.path.path.clone().trim_start_matches('/').to_string();
