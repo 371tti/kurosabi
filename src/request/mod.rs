@@ -32,6 +32,20 @@ impl Req {
         }
     }
 
+    pub async fn wait_request(&mut self) -> Result<(), KurosabiError> {
+        // 接続を待機し、何か受け取るまで待つ
+        let reader = self.connection.reader();
+        let mut buf = [0u8; 1];
+        
+        reader
+            .get_mut()
+            .peek(&mut buf)
+            .await
+            .map_err(KurosabiError::IoError)?;
+
+        Ok(())
+    }
+
     /// httpリクエストのヘッダを最低限パースする
     pub async fn parse_headers(&mut self) -> Result<(), KurosabiError> {
         let reader = self.connection.reader();

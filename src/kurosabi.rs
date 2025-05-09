@@ -1,5 +1,5 @@
 use std::{pin::Pin, sync::Arc};
-use log::{error, info, warn};
+use log::{debug, error, info, warn};
 
 use crate::error::HttpError;
 use crate::{context::DefaultContext, request::Req, response::Res, router::{BoxedHandler, DefaultRouter, GenRouter}, server::{worker::Worker, KurosabiServerBuilder, TcpConnection}};
@@ -193,11 +193,19 @@ where
         
         loop {
             // 新しいリクエストが来るまで待機
+            if let Err(e) = req.wait_request().await {
+                error!("Failed to wait for request: {:?}", e);
+                break;
+            }
+            // リクエストのタイミングを計測
+            let rev_to_res_time = std::time::Instant::now();
             // HTTPリクエストのヘッダーをパース
             if let Err(e) = req.parse_headers().await {
                 error!("Failed to parse headers: {:?}", e);
                 break;
             }
+            let send_time = std::time::Instant::now();
+            let ps_time = std::time::Instant::now();
             let method = req.method.to_str();
             let path = req.path.path.clone();
             let version = req.version.clone();
@@ -224,6 +232,8 @@ where
                         ctx
                     }
                 };
+
+                let ps_time = ps_time.elapsed();
                 
                 // ログ出力（レスポンスコードに応じて色分け）
                 if context.res.code >= 500 {
@@ -239,6 +249,14 @@ where
                     error!("Failed to flush response: {:?}", e);
                     break;
                 }
+
+                let send_time = send_time.elapsed();
+                let rev_to_res_time = rev_to_res_time.elapsed();
+
+                let rev_to_res_time = rev_to_res_time.as_secs_f64() * 1000.0;
+                let ps_time = ps_time.as_secs_f64() * 1000.0;
+                let send_time = send_time.as_secs_f64() * 1000.0;
+                debug!("all_time: {:.6}ms, send_time: {:.6}ms, processing: {:.6}ms", rev_to_res_time, send_time, ps_time);
                 
                 // ヘッダーの内容から接続を閉じるべきか判断
                 if should_close_connection(&context.req, &context.res) {

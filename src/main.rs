@@ -14,7 +14,7 @@ impl MyContext {
 
 #[tokio::main]
 async fn main() {
-    env_logger::builder().filter_level(log::LevelFilter::Info).init();
+    env_logger::builder().filter_level(log::LevelFilter::Debug).init();
 
     let arc_context = Arc::new(MyContext::new("Kurosabi".to_string()));
 
@@ -100,8 +100,8 @@ async fn main() {
 
     let mut server = kurosabi.server()
         .host([0, 0, 0, 0])
-        .port(85)
-        .thread(4)
+        .port(83)
+        .thread(8)
         .thread_name("kurosabi-worker".to_string())
         .queue_size(128)
         .build();

@@ -1,14 +1,13 @@
-//! radix_router.rs
-use std::{
-    collections::HashMap,
-    future::Future,
-    pin::Pin,
-    sync::Arc,
-};
+//! 高速 Radix ルータ (AHash + SmallVec + 2-phase param)
+
+use std::{future::Future, pin::Pin, sync::Arc};
+
+use ahash::AHashMap as Map;
+use smallvec::SmallVec;
 
 use crate::{error::HttpError, kurosabi::Context, request::Req, utils::method::Method};
 
-/// ---------- 共通トrait ----------
+/// --------- Router trait --------------------------------------------------
 pub trait GenRouter<F>: Send + Sync
 where
     F: Send + Sync + 'static,
@@ -18,41 +17,42 @@ where
     fn route(&self, req: &mut Req) -> Option<F>;
 }
 
-/// ---------- ハンドラ型 ----------
+/// --------- Handler alias -------------------------------------------------
 pub type BoxedHandler<C> = Box<
     dyn Fn(Context<C>)
-        -> Pin<
-            Box<dyn Future<Output = Result<Context<C>, (Context<C>, HttpError)>> + Send>,
-        > + Send
+        -> Pin<Box<dyn Future<Output = Result<Context<C>, (Context<C>, HttpError)>> + Send>>
+        + Send
         + Sync,
 >;
 
-/// ------------- Radix tree 実装 -------------
+/// --------- Radix tree ----------------------------------------------------
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Kind {
-    Static,   // /foo
-    Param,    // :id
-    Wildcard, // *
+    Static,
+    Param,
+    Wildcard,
 }
 
-/// 圧縮ノード
+type StaticKids<C> = SmallVec<[Box<Node<C>>; 4]>; // 4 本までヒープ 0
+
 struct Node<C> {
+    #[allow(dead_code)]
     kind: Kind,
-    label: String,                       // Static または Param 部分
-    param_name: Option<String>,          // Param 名
-    fixed: HashMap<u8, Box<Node<C>>>,    // 先頭バイト→子
-    param_child: Option<Box<Node<C>>>,   // :param
-    wild_child: Option<Box<Node<C>>>,    // *
+    label: Box<str>,                // 圧縮済みラベル
+    param_name: Option<Box<str>>,   // :param 名
+    fixed: Map<u8, StaticKids<C>>,  // 先頭バイト→兄弟配列
+    param_child: Option<Box<Node<C>>>,
+    wild_child:  Option<Box<Node<C>>>,
     handler: Option<Arc<BoxedHandler<C>>>,
 }
 
 impl<C> Node<C> {
-    fn new(kind: Kind, label: String) -> Self {
-        Node {
+    fn new(kind: Kind, label: impl Into<Box<str>>) -> Self {
+        Self {
             kind,
-            label,
+            label: label.into(),
             param_name: None,
-            fixed: HashMap::new(),
+            fixed: Map::default(),
             param_child: None,
             wild_child: None,
             handler: None,
@@ -60,46 +60,39 @@ impl<C> Node<C> {
     }
 }
 
-/// ルーター本体
+/// --------- Router struct -------------------------------------------------
 pub struct DefaultRouter<C> {
-    trees: HashMap<Method, Box<Node<C>>>,
+    trees: Map<Method, Box<Node<C>>>,
     sealed: bool,
 }
 
 impl<C> DefaultRouter<C> {
     pub fn new() -> Self {
-        DefaultRouter {
-            trees: HashMap::new(),
+        Self {
+            trees: Map::default(),
             sealed: false,
         }
     }
 }
 
-// ----------- GenRouter 実装 -----------
+/*================ GenRouter impl =================*/
 impl<C: 'static> GenRouter<Arc<BoxedHandler<C>>> for DefaultRouter<C> {
-    /// ① 登録
+    /*----- regist ---------------------------------------------------------*/
     fn regist(&mut self, method: Method, pattern: &str, excuter: Arc<BoxedHandler<C>>) {
-        assert!(
-            !self.sealed,
-            "`build()` 後には regist できません。"
-        );
+        assert!(!self.sealed, "router is sealed");
 
-        // 先頭 '/' を除去して走査用スライスを得る
         let mut path = pattern.trim_start_matches('/');
-        
-        let panic_method = method.clone();
-        // ルートノード
+
         let root = self
             .trees
-            .entry(method)
-            .or_insert_with(|| Box::new(Node::new(Kind::Static, String::new())));
+            .entry(method.clone())
+            .or_insert_with(|| Box::new(Node::new(Kind::Static, "")));
         let mut node = root.as_mut();
 
         loop {
-            // 末尾に到達
             if path.is_empty() {
                 if node.handler.is_some() {
-                    panic!("duplicate route: {panic_method} {pattern}");
+                    panic!("duplicate route: {:?} {}", method, pattern);
                 }
                 node.handler = Some(excuter);
                 return;
@@ -107,94 +100,95 @@ impl<C: 'static> GenRouter<Arc<BoxedHandler<C>>> for DefaultRouter<C> {
 
             match path.as_bytes()[0] {
                 b':' => {
-                    // :param
+                    /* :param --------------------------------------------*/
                     let end = path.find('/').unwrap_or(path.len());
                     let name = &path[1..end];
-                    path = &path[end..].trim_start_matches('/');
+                    path = path[end..].trim_start_matches('/');
 
                     let child = node
                         .param_child
-                        .get_or_insert_with(|| Box::new(Node::new(Kind::Param, String::new())));
-                    child.param_name = Some(name.to_string());
+                        .get_or_insert_with(|| Box::new(Node::new(Kind::Param, "")));
+                    child.param_name = Some(name.into());
                     node = child.as_mut();
                 }
                 b'*' => {
-                    // * (末尾専用とする)
+                    /* * --------------------------------------------------*/
                     node = node
                         .wild_child
-                        .get_or_insert_with(|| Box::new(Node::new(Kind::Wildcard, String::new())));
-                    // 残り全部を * が飲み込む
+                        .get_or_insert_with(|| Box::new(Node::new(Kind::Wildcard, "")));
                     path = "";
                 }
                 _ => {
-                    // Static セグメントを抜き出す (':' '/' '*' 手前まで)
+                    /* Static --------------------------------------------*/
                     let mut i = 0;
-                    while i < path.len() {
-                        match path.as_bytes()[i] {
-                            b':' | b'*' | b'/' => break,
-                            _ => i += 1,
-                        }
+                    while i < path.len()
+                        && !matches!(path.as_bytes()[i], b':' | b'*' | b'/')
+                    {
+                        i += 1;
                     }
                     let (seg, rest) = path.split_at(i);
                     path = rest.trim_start_matches('/');
 
-                    // 先頭バイトで子検索（Radix node 接頭辞圧縮）
                     let key = seg.as_bytes()[0];
-                    let child = node.fixed.entry(key).or_insert_with(|| {
-                        Box::new(Node::new(Kind::Static, seg.to_string()))
-                    });
+                    let bucket = node.fixed.entry(key).or_default();
 
-                    // 共有 prefix 長を比較
-                    let lcp = child
-                        .label
-                        .bytes()
-                        .zip(seg.bytes())
-                        .take_while(|(a, b)| a == b)
-                        .count();
-                    if lcp < child.label.len() {
-                        // 既存 child を分割
-                        let suffix = child.label[lcp..].to_string();
-                        let mut split = Node::new(Kind::Static, suffix);
-                        std::mem::swap(&mut split.fixed, &mut child.fixed);
-                        split.handler = child.handler.take();
-                        child.label.truncate(lcp);
-                        child
-                            .fixed
-                            .insert(split.label.as_bytes()[0], Box::new(split));
+                    // 兄弟の中で共有 prefix 最大のノードを探す
+                    let mut idx = None;
+                    for (n, child) in bucket.iter_mut().enumerate() {
+                        let lcp = child
+                            .label
+                            .bytes()
+                            .zip(seg.bytes())
+                            .take_while(|(a, b)| a == b)
+                            .count();
+                        if lcp == child.label.len() {
+                            idx = Some((n, lcp));
+                            break;
+                        } else if lcp > 0 {
+                            // 部分一致→分割
+                            let label_clone = child.label.clone();
+                            let suffix = &label_clone[lcp..];
+                            let mut split = Node::new(Kind::Static, suffix);
+                            std::mem::swap(&mut split.fixed, &mut child.fixed);
+                            split.handler = child.handler.take();
+                            child.label = label_clone[..lcp].into();
+                            child
+                                .fixed
+                                .entry(suffix.as_bytes()[0])
+                                .or_default()
+                                .push(Box::new(split));
+                            idx = Some((n, lcp));
+                            break;
+                        }
                     }
-                    // 未消化部分を続ける
-                    if seg.len() > lcp {
-                        // 分割後の新 suffix を child の先に付ける
-                        let suffix = &seg[lcp..];
-                        let new_child = child
-                            .fixed
-                            .entry(suffix.as_bytes()[0])
-                            .or_insert_with(|| {
-                                Box::new(Node::new(Kind::Static, suffix.to_string()))
-                            });
-                        node = new_child.as_mut();
+                    let child = if let Some((n, _)) = idx {
+                        &mut bucket[n]
                     } else {
-                        node = child.as_mut();
-                    }
+                        bucket.push(Box::new(Node::new(Kind::Static, seg)));
+                        bucket.last_mut().unwrap()
+                    };
+                    node = child.as_mut();
                 }
             }
         }
     }
 
-    /// ② ビルド（木の凍結）
+    /*----- build ----------------------------------------------------------*/
     fn build(&mut self) {
         if self.sealed {
             return;
         }
         fn dfs<C>(n: &mut Node<C>) {
-            n.fixed.shrink_to_fit();
+            for kids in n.fixed.values_mut() {
+                for c in kids.iter_mut() {
+                    dfs(c);
+                }
+                kids.shrink_to_fit();
+            }
             if let Some(c) = &mut n.param_child {
                 dfs(c);
             }
             if let Some(c) = &mut n.wild_child {
-                dfs(c);
-            }
-            for c in n.fixed.values_mut() {
                 dfs(c);
             }
         }
@@ -204,46 +198,45 @@ impl<C: 'static> GenRouter<Arc<BoxedHandler<C>>> for DefaultRouter<C> {
         self.sealed = true;
     }
 
-    /// ③ ルーティング
+    /*----- route ----------------------------------------------------------*/
     fn route(&self, req: &mut Req) -> Option<Arc<BoxedHandler<C>>> {
-        // ① path を自前の String として確保
-        let full_path = req.path.path.clone();
+        let mut node = self.trees.get(&req.method)?.as_ref();
+        let path = req.path.path.clone().trim_start_matches('/').to_string();
+
         let mut i = 0;
-        let mut node = match self.trees.get(&req.method) {
-            Some(n) => n.as_ref(),
-            None => return None,
-        };
-    
-        // &str は full_path 由来なので req.path とは独立
-        let path = full_path.trim_start_matches('/');
+        let mut params: SmallVec<[(&str, (usize, usize)); 4]> = SmallVec::new();
 
-        while i <= path.len() {
-            // 終端判定
+        /*----- phase-1 : 読み取り & param スライス記憶 ------------------*/
+        loop {
             if i == path.len() {
-                return node.handler.clone();
+                break;
             }
-
-            // Static マッチ
-            if let Some(child) = node.fixed.get(&path.as_bytes()[i]) {
-                if path[i..].starts_with(&child.label) {
-                    i += child.label.len();
-                    if i < path.len() && path.as_bytes()[i] == b'/' {
-                        i += 1;
+            /* Static ----------------------------------------------------*/
+            if let Some(bucket) = node.fixed.get(&path.as_bytes()[i]) {
+                let mut matched = false;
+                for child in bucket {
+                    if path[i..].starts_with(&*child.label) {
+                        i += child.label.len();
+                        if i < path.len() && path.as_bytes()[i] == b'/' {
+                            i += 1;
+                        }
+                        node = child;
+                        matched = true;
+                        break;
                     }
-                    node = child;
+                }
+                if matched {
                     continue;
                 }
             }
-
-            // Param マッチ
+            /* Param -----------------------------------------------------*/
             if let Some(child) = &node.param_child {
                 let start = i;
                 while i < path.len() && path.as_bytes()[i] != b'/' {
                     i += 1;
                 }
-                if let Some(pn) = &child.param_name {
-                    req.path
-                        .set_field(pn, &path[start..i]); // パラメータ格納
+                if let Some(name) = &child.param_name {
+                    params.push((name, (start, i)));
                 }
                 if i < path.len() && path.as_bytes()[i] == b'/' {
                     i += 1;
@@ -251,18 +244,20 @@ impl<C: 'static> GenRouter<Arc<BoxedHandler<C>>> for DefaultRouter<C> {
                 node = child;
                 continue;
             }
-
-            // Wildcard マッチ
+            /* Wildcard --------------------------------------------------*/
             if let Some(child) = &node.wild_child {
-                req.path.set_field("*", &path[i..]);
+                params.push(("*", (i, path.len())));
                 node = child;
-                i = path.len();
-                continue;
+                // i = path.len();
+                break;
             }
-
-            // 失敗
-            return None;
+            return None; // mismatch
         }
-        None
+
+        /*----- phase-2 : 可変借用してセット -----------------------------*/
+        for (key, (s, e)) in params {
+            req.path.set_field(key, &path[s..e]);
+        }
+        node.handler.clone()
     }
 }
