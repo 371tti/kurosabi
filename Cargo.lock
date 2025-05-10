@@ -215,9 +215,9 @@ checksum = "07e28edb80900c19c28f1072f2e8aeca7fa06b23cd4169cefe1af5aa3260783f"
 
 [[package]]
 name = "html_format"
-version = "0.2.1"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "21c512f23053932a561aee342ebbcc8877219ef196e39e95f329c1d82229e5bc"
+checksum = "2f3cf0846581e28d4e615b6cf3758502d9ec3da45e35037b2d5640d530a86a4b"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -262,7 +262,7 @@ dependencies = [
 
 [[package]]
 name = "kurosabi"
-version = "0.2.7"
+version = "0.2.8"
 dependencies = [
  "ahash",
  "async-trait",

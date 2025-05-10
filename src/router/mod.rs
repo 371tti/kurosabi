@@ -178,7 +178,7 @@ impl<C: 'static> GenRouter<Arc<BoxedHandler<C>>> for DefaultRouter<C> {
                     let lcp = child.label.len();
                     if seg.len() > lcp {
                         let suffix = &seg[lcp..];
-                        let new_child = child
+                        let _new_child = child
                             .fixed
                             .entry(suffix.as_bytes()[0])
                             .or_default()
