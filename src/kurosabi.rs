@@ -13,8 +13,8 @@ where
     context: C
 }
 
-impl Kurosabi<DefaultContext<String>, DefaultRouter<DefaultContext<String>>> {
-    pub fn new() -> Kurosabi<DefaultContext<String>, DefaultRouter<DefaultContext<String>>> {
+impl Kurosabi<DefaultContext, DefaultRouter<DefaultContext>> {
+    pub fn new() -> Kurosabi<DefaultContext, DefaultRouter<DefaultContext>> {
         Kurosabi {
             router: DefaultRouter::new(),
             context: DefaultContext::new(),

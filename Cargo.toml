@@ -1,6 +1,6 @@
 [package]
 name = "kurosabi"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
 authors = ["371tti"]
 description = "A lightweight asynchronous HTTP server framework built on Tokio."
@@ -13,7 +13,6 @@ tokio = { version = "1.45.0", features = ["full"] }
 log = "0.4.27"
 crossbeam-queue = "0.3.12"
 async-trait = "0.1.88"
-dashmap = "6.1.0"
 regex = "1.11.1"
 env_logger = "0.11.8"
 socket2 = "0.5.9"
