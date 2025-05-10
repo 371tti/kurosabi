@@ -20,3 +20,4 @@ socket2 = "0.5.9"
 serde_json = "1.0.140"
 ahash    = "0.8"      # 高速ハッシュねね
 smallvec = "1.15.0"
+html_format = "0.1.0"

@@ -204,8 +204,10 @@ where
                 error!("Failed to parse headers: {:?}", e);
                 break;
             }
+            // リクエストのタイミングを計測
             let send_time = std::time::Instant::now();
             let ps_time = std::time::Instant::now();
+
             let method = req.method.to_str();
             let path = req.path.path.clone();
             let version = req.version.clone();
@@ -235,28 +237,30 @@ where
 
                 let ps_time = ps_time.elapsed();
                 
-                // ログ出力（レスポンスコードに応じて色分け）
-                if context.res.code >= 500 {
-                    error!("{}- \x1b[31m{}\x1b[0m\n{}", head_info, context.res.code, err);
-                } else if context.res.code >= 400 {
-                    warn!("{}- \x1b[33m{}\x1b[0m\n{}", head_info, context.res.code, err);
-                } else {
-                    info!("{}- \x1b[32m{}\x1b[0m", head_info, context.res.code);
-                }
-                
                 // レスポンス送信
                 if let Err(e) = context.res.flush(&mut context.req).await {
                     error!("Failed to flush response: {:?}", e);
                     break;
                 }
 
+                // レスポンスのタイミングを計測
                 let send_time = send_time.elapsed();
                 let rev_to_res_time = rev_to_res_time.elapsed();
 
-                let rev_to_res_time = rev_to_res_time.as_secs_f64() * 1000.0;
-                let ps_time = ps_time.as_secs_f64() * 1000.0;
-                let send_time = send_time.as_secs_f64() * 1000.0;
-                debug!("all_time: {:.6}ms, send_time: {:.6}ms, processing: {:.6}ms", rev_to_res_time, send_time, ps_time);
+                debug!("\ntime:\n\tall_time: {:?}\n\tsend_time: {:?}\n\tprocessing: {:?}", rev_to_res_time, send_time, ps_time);
+
+                // ログ出力（レスポンスコードに応じて色分け）
+                if context.res.code >= 500 {
+                    error!("{}- \x1b[31m{}\x1b[0m\n{}", head_info, context.res.code, err);
+                } else if context.res.code >= 400 {
+                    warn!("{}- \x1b[33m{}\x1b[0m\n{}", head_info, context.res.code, err);
+                } else if context.res.code >= 300 {
+                    info!("{}- \x1b[34m{}\x1b[0m", head_info, context.res.code);
+                } else if context.res.code >= 200 {
+                    info!("{}- \x1b[32m{}\x1b[0m", head_info, context.res.code);
+                } else {
+                    info!("{}- \x1b[36m{}\x1b[0m", head_info, context.res.code);
+                }
                 
                 // ヘッダーの内容から接続を閉じるべきか判断
                 if should_close_connection(&context.req, &context.res) {

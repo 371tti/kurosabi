@@ -1,6 +1,9 @@
 use std::sync::Arc;
 
-use kurosabi::kurosabi::Kurosabi;
+use kurosabi::{
+    Kurosabi,
+    html_format,
+};
 
 pub struct MyContext {
     pub name: String,
@@ -94,6 +97,16 @@ async fn main() {
             <li><a href="/gurd/*">/gurd/*</a></li>
         </ul>
         "#);
+        Ok(c)
+    });
+
+    kurosabi.get("/*", |mut c| async move {
+        let html: String = html_format!(
+            r#"<h1>{{ name }}</h1>"#,
+            name = c.req.header.get_user_agent().unwrap_or("Unknown"),
+        );
+
+        c.res.html(&html);
         Ok(c)
     });
 

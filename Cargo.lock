@@ -222,6 +222,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e5274423e17b7c9fc20b6e7e208532f9b19825d82dfd615708b70edd83df41f1"
 
 [[package]]
+name = "html_format"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d3b2c1135da04591f2572250f892c15b90fd2a5ea5bfb2022bdc7cc5d268373d"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "is_terminal_polyfill"
 version = "1.70.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -266,6 +277,7 @@ dependencies = [
  "crossbeam-queue",
  "dashmap",
  "env_logger",
+ "html_format",
  "log",
  "regex",
  "serde_json",
