@@ -32,6 +32,7 @@ pub enum HttpError {
     NotFound,
     MethodNotAllowed,
     InternalServerError(String),
+    RangeNotSatisfiable,
     InvalidLength(String),
     CUSTOM(u16, String),
 }
@@ -43,6 +44,7 @@ impl std::fmt::Display for HttpError {
             HttpError::NotFound => write!(f, "Not Found"),
             HttpError::MethodNotAllowed => write!(f, "Method Not Allowed"),
             HttpError::InternalServerError(message) => write!(f, "Internal Server Error: {}", message),
+            HttpError::RangeNotSatisfiable => write!(f, "Range Not Satisfiable"),
             HttpError::InvalidLength(message) => write!(f, "Invalid Length: {}", message),
             HttpError::CUSTOM(status, message) => write!(f, "Status: {}, Message: {}", status, message),
         }
@@ -56,6 +58,7 @@ impl std::fmt::Debug for HttpError {
             HttpError::NotFound =>                               write!(f, "Not Found ============="),
             HttpError::MethodNotAllowed =>                       write!(f, "Method Not Allowed ===="),
             HttpError::InternalServerError(message) =>          write!(f, "Internal Server Error: {}", message),
+            HttpError::RangeNotSatisfiable =>                     write!(f, "Range Not Satisfiable"),
             HttpError::InvalidLength(message) =>       write!(f, "Invalid Length: {}", message),
             HttpError::CUSTOM(status, message) => write!(f, "Status: {}, Message: {}", status, message),
         }
@@ -85,6 +88,11 @@ impl HttpError {
                 res.set_status(500);
                 res.header.set("Content-Type", "text/plain");
                 res.text(format!("Internal Server Error: {}", message).as_str());
+            }
+            HttpError::RangeNotSatisfiable => {
+                res.set_status(416);
+                res.header.set("Content-Type", "text/plain");
+                res.text("Range Not Satisfiable");
             }
             HttpError::InvalidLength(message) => {
                 res.set_status(416);

@@ -1,8 +1,14 @@
+use std::ffi::OsStr;
+use std::io::SeekFrom;
+use std::path::Path;
 use std::pin::Pin;
 
+use tokio::fs::File;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncSeekExt};
+use tokio_util::io::ReaderStream;
 
 use tokio::io::AsyncWriteExt;
+use mime_guess::from_path;
 
 use crate::error::HttpError;
 use crate::request::Req;
@@ -118,42 +124,88 @@ impl Res {
     }
 
     /// ファイルレスポンス
-    /// ファイルレスポンスは、ファイルを指定する
-    #[inline]
-    pub async fn file(&mut self, req: &Req, file: &std::path::PathBuf) -> Result<&mut Self, HttpError> {
-        self.header.set("Content-Type", "application/octet-stream");
-        let metadata = file.metadata().map_err(|_| HttpError::InternalServerError("Failed to retrieve file metadata".to_string()))?;
-        self.header.set("Content-Length", &metadata.len().to_string());
-        self.header.set("Content-Disposition", &format!("attachment; filename={}", file.file_name().unwrap().to_str().unwrap()));
-        let raw_range = req.header.get("Range");
-        let range = if let Some(r) = raw_range {
-            let r = r.split("=").collect::<Vec<&str>>();
-            if r.len() != 2 {
-                return Err(HttpError::BadRequest("Invalid Range Header".to_string()));
+    ///
+    /// * `path` … 返したいファイル
+    /// * Range ヘッダ対応（`bytes=start-end` / `start-` / `-suffix` すべてOK）
+    pub async fn file<P: AsRef<Path>>(
+        &mut self,
+        req: &Req,
+        path: P,
+    ) -> Result<&mut Self, HttpError> {
+        let path = path.as_ref();
+
+        /* ---------- ファイル open & metadata ---------- */
+        let mut file = File::open(path)
+            .await
+            .map_err(|_| HttpError::NotFound)?;
+        let meta = file
+            .metadata()
+            .await
+            .map_err(|_| HttpError::InternalServerError("metadata failed".into()))?;
+        let size = meta.len();
+
+        /* ---------- Content-Type 推定 ---------------- */
+        let mime = from_path(path);
+        let mime_type = mime.first_or_octet_stream();
+        let ctype = mime_type.essence_str();
+        self.header.set("Content-Type", ctype);
+
+        /* ---------- Content-Disposition -------------- */
+        if let Some(fname) = path.file_name().and_then(OsStr::to_str) {
+            self.header
+                .set("Content-Disposition", &format!("attachment; filename=\"{}\"", fname));
+        }
+
+        /* ---------- Range 解析 ----------------------- */
+        if let Some(range_raw) = req.header.get("Range") {
+            // bytes=START-END / START- / -SUFFIX
+            let err = || HttpError::BadRequest("Invalid Range".into());
+            let bytes_part = range_raw
+                .strip_prefix("bytes=")
+                .ok_or_else(err)?;
+
+            let mut start = 0;
+            let mut end = size - 1;
+
+            match bytes_part.split_once('-') {
+                Some((s, e)) => {
+                    if !s.is_empty() { start = s.parse().map_err(|_| err())?; }
+                    if !e.is_empty() { end = e.parse().map_err(|_| err())?; }
+                    if e.is_empty() && !s.is_empty() {
+                        // case START-  (末尾まで)
+                        end = size - 1;
+                    }
+                    if s.is_empty() && !e.is_empty() {
+                        // case -SUFFIX (末尾 SUFFIX byte)
+                        let suffix: u64 = e.parse().map_err(|_| err())?;
+                        start = size.saturating_sub(suffix);
+                        end = size - 1;
+                    }
+                }
+                None => return Err(err()),
             }
-            let r = r[1].split("-").collect::<Vec<&str>>();
-            if r.len() != 2 {
-                return Err(HttpError::BadRequest("Invalid Range Header".to_string()));
+            if start > end || end >= size {
+                return Err(HttpError::RangeNotSatisfiable);
             }
-            let start = r[0].parse::<u64>().map_err(|e| HttpError::BadRequest(e.to_string()))?;
-            let end = r[1].parse::<u64>().map_err(|e| HttpError::BadRequest(e.to_string()))?;
-            (start, end)
+
+            /* ---- range 転送 ---- */
+            let len = end - start + 1;
+            file.seek(SeekFrom::Start(start))
+                .await
+                .map_err(|_| HttpError::InternalServerError("seek failed".into()))?;
+            self.body = Body::Stream(Box::pin(file.take(len)));
+            self.code = 206; // Partial Content
+            self.header.set("Content-Length", &len.to_string());
+            self.header
+                .set("Content-Range", &format!("bytes {}-{}/{}", start, end, size));
         } else {
-            (0, metadata.len() - 1)
-        };
-        let mut f = tokio::fs::File::open(file)
-            .await
-            .map_err(|_| HttpError::InternalServerError("Failed to open file".to_string()))?;
-        let metadata = f.metadata()
-            .await
-            .map_err(|_| HttpError::InternalServerError("Failed to retrieve file metadata".to_string()))?;
-        let length = range.1 - range.0 + 1;
-        f.seek(tokio::io::SeekFrom::Start(range.0))
-            .await
-            .map_err(|_| HttpError::InternalServerError("Failed to seek in file".to_string()))?;
-        self.header.set("Content-Length", &length.to_string());
-        self.header.set("Content-Range", &format!("bytes {}-{}/{}", range.0, range.1, metadata.len()));
-        self.body = Body::Stream(Box::pin(f.take(length)));
+            /* ---- 全量転送 (ReaderStream) ---------------- */
+            let stream = ReaderStream::new(file);
+            let stream_reader = tokio_util::io::StreamReader::new(stream);
+            self.body = Body::Stream(Box::pin(stream_reader));
+            self.header.set("Content-Length", &size.to_string());
+        }
+
         Ok(self)
     }
 }
