@@ -37,6 +37,42 @@ impl Res {
         self
     }
 
+    /// XMLレスポンス
+    #[inline]
+    pub fn xml(&mut self, text: &str) -> &mut Self {
+        self.header.set("Content-Type", "application/xml");
+        self.header.set("Content-Length", &text.len().to_string());
+        self.body = Body::Text(text.to_string());
+        self
+    }
+
+    /// JSレスポンス
+    #[inline]
+    pub fn js(&mut self, text: &str) -> &mut Self {
+        self.header.set("Content-Type", "application/javascript");
+        self.header.set("Content-Length", &text.len().to_string());
+        self.body = Body::Text(text.to_string());
+        self
+    }
+
+    /// CSSレスポンス
+    #[inline]
+    pub fn css(&mut self, text: &str) -> &mut Self {
+        self.header.set("Content-Type", "text/css");
+        self.header.set("Content-Length", &text.len().to_string());
+        self.body = Body::Text(text.to_string());
+        self
+    }
+
+    /// CSVレスポンス
+    #[inline]
+    pub fn csv(&mut self, text: &str) -> &mut Self {
+        self.header.set("Content-Type", "text/csv");
+        self.header.set("Content-Length", &text.len().to_string());
+        self.body = Body::Text(text.to_string());
+        self
+    }
+
     /// JSONレスポンス
     #[inline]
     pub fn json(&mut self, text: &str) -> &mut Self {
@@ -61,7 +97,15 @@ impl Res {
     pub fn binary(&mut self, data: &[u8]) -> &mut Self {
         self.header.set("Content-Type", "application/octet-stream");
         self.header.set("Content-Length", &data.len().to_string());
-        self.body = Body::Text(String::from_utf8_lossy(data).to_string());
+        self.body = Body::Binary(data.to_vec());
+        self
+    }
+
+    #[inline]
+    pub fn data(&mut self, data: &[u8], content_type: &str) -> &mut Self {
+        self.header.set("Content-Type", content_type);
+        self.header.set("Content-Length", &data.len().to_string());
+        self.body = Body::Binary(data.to_vec());
         self
     }
 
@@ -144,6 +188,7 @@ impl Res {
         match &mut self.body {
             Body::Empty => (),
             Body::Text(text) => writer.write_all(text.as_bytes()).await.map_err(|e| KurosabiError::IoError(e))?,
+            Body::Binary(data) => writer.write_all(data).await.map_err(|e| KurosabiError::IoError(e))?,
             Body::Stream(stream) => {
                 let mut reader = tokio::io::BufReader::new(stream);
                 let mut buffer = [0; 8192];
@@ -166,5 +211,6 @@ impl Res {
 pub enum Body {
     Empty,
     Text(String),
+    Binary(Vec<u8>),
     Stream(Pin<Box<dyn AsyncRead + Send + Sync>>),
 }
