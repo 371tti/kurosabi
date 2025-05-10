@@ -113,7 +113,7 @@ async fn main() {
 
     let mut server = kurosabi.server()
         .host([0, 0, 0, 0])
-        .port(83)
+        .port(8080)
         .thread(8)
         .thread_name("kurosabi-worker".to_string())
         .queue_size(128)
