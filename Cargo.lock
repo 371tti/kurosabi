@@ -258,7 +258,6 @@ dependencies = [
  "env_logger",
  "html_format",
  "log",
- "regex",
  "serde_json",
  "smallvec",
  "socket2",
