@@ -178,6 +178,11 @@ impl<C: 'static> GenRouter<Arc<BoxedHandler<C>>> for DefaultRouter<C> {
                     let lcp = child.label.len();
                     if seg.len() > lcp {
                         let suffix = &seg[lcp..];
+                        let new_child = child
+                            .fixed
+                            .entry(suffix.as_bytes()[0])
+                            .or_default()
+                            .push(Box::new(Node::new(Kind::Static, suffix)));
                         node = child
                             .fixed
                             .get_mut(&suffix.as_bytes()[0])
