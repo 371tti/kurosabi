@@ -156,8 +156,19 @@ impl Header {
 impl Header {
     /// head: get_cookie を取得する
     #[inline]
-    pub fn get_cookie(&self) -> Option<&str> {
-        self.get("COOKIE")
+    pub fn get_cookie(&self, key: &str) -> Option<&str> {
+        let cookie = self.gets("COOKIE");
+        for c in cookie {
+            for pair in c.split(';') {
+                let pair = pair.trim();
+                if let Some((k, v)) = pair.split_once('=') {
+                    if k.trim() == key {
+                        return Some(v.trim());
+                    }
+                }
+            }
+        }
+        None
     }
 
     /// head: set_cookie をセットする
