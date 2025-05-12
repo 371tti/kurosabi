@@ -271,6 +271,7 @@ dependencies = [
  "html_format",
  "log",
  "mime_guess",
+ "serde",
  "serde_json",
  "smallvec",
  "socket2",
