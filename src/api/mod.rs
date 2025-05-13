@@ -7,6 +7,7 @@ where
 {
     fn new() -> Self;
     fn handler(
+        self,
         c: &mut C,
         req_json: &Rqs,
     ) -> Rss;
@@ -21,6 +22,7 @@ where
 {
     fn new() -> Self;
     fn handler(
+        self,
         c: &mut C,
     ) -> Rss;
     fn osa() -> Option<String> {

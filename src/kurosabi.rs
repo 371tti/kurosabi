@@ -1,6 +1,7 @@
 use std::{pin::Pin, sync::Arc};
 use log::{debug, error, info, warn};
 
+use crate::api::GETJsonAPI;
 use crate::error::HttpError;
 use crate::{context::DefaultContext, request::Req, response::Res, router::{BoxedHandler, DefaultRouter, GenRouter}, server::{worker::Worker, KurosabiServerBuilder, TcpConnection}};
 use crate::utils::method::Method;
@@ -62,6 +63,29 @@ where
                 + Sync,
         > = Box::new(move |c| Box::pin(handler(c)));
         self.router.regist(method, pattern, std::sync::Arc::new(boxed_handler));
+    }
+
+    pub fn get_json_api<API, Rss>(&mut self, pattern: &str, api_struct: API)
+    where
+        C: Clone + Send + Sync + 'static,
+        Rss: serde::Serialize,
+        API: GETJsonAPI<Context<C>, Rss> + Send + Sync + 'static,
+    {
+        let api_struct = api_struct.clone();
+        let handler = {
+            let api_clone = api_struct.clone(); // 必要に応じてclone
+            move |mut c: Context<C>| {
+                // api_cloneを呼び出すためにここでもcloneする、または共有参照を使う
+                let api = api_clone.clone(); 
+                async move {
+                    let res = api.handler(&mut c);
+                    let serialized_res = serde_json::to_value(res).unwrap_or_default();
+                    c.res.json_value(&serialized_res);
+                    Ok(c)
+                }
+            }
+        };
+        self.register_route(Method::GET, pattern, handler);
     }
 
     pub fn get<F, Fut>(&mut self, pattern: &str, handler: F)
