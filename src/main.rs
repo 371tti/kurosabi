@@ -16,8 +16,6 @@ impl MyContext {
 }
 
 
-
-
 #[derive(Clone)]
 pub struct MyAPI;
 
@@ -36,7 +34,8 @@ impl GETJsonAPI<Context<Arc<MyContext>>, MyAPIJson> for MyAPI {
             self,
             c: &mut Context<Arc<MyContext>>,
         ) -> MyAPIJson {
-
+        println!("heeee");
+        println!("{}: ", c.req.path.get_raw_path());
         let name = c.req.path.get_query("name").unwrap_or("Kurosabi".to_string());
         let version = c.req.path.get_query("version").unwrap_or("0.1".to_string());
         
@@ -55,7 +54,7 @@ async fn main() {
 
     let mut kurosabi = Kurosabi::with_context(arc_context);
 
-    kurosabi.get_json_api("/json", MyAPI::new());
+    kurosabi.get_json_api("/jsonapi", MyAPI::new());
 
 
 

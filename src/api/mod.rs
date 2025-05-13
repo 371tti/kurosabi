@@ -1,14 +1,14 @@
 use serde::{Deserialize, Serialize};
 pub trait POSTJsonAPI<C, Rqs, Rss>: Clone
 where
-    Rqs: for<'a> Deserialize<'a>,
+    Rqs: crate::api::Rqs,
     Rss: Serialize,
 {
     fn new() -> Self;
     fn handler(
         self,
         c: &mut C,
-        req_json: &Rqs,
+        req_json: Result<Rqs, serde_json::Error>,
     ) -> Rss;
     fn osa() -> Option<String> {
         None
@@ -27,4 +27,8 @@ where
     fn osa() -> Option<String> {
         None
     }
+}
+
+pub trait Rqs: for<'a> Deserialize<'a> {
+    fn def_err_req() -> Self;
 }

@@ -1,7 +1,7 @@
 use std::{pin::Pin, sync::Arc};
 use log::{debug, error, info, warn};
 
-use crate::api::GETJsonAPI;
+use crate::api::{GETJsonAPI, POSTJsonAPI};
 use crate::error::HttpError;
 use crate::{context::DefaultContext, request::Req, response::Res, router::{BoxedHandler, DefaultRouter, GenRouter}, server::{worker::Worker, KurosabiServerBuilder, TcpConnection}};
 use crate::utils::method::Method;
@@ -86,6 +86,32 @@ where
             }
         };
         self.register_route(Method::GET, pattern, handler);
+    }
+
+    pub fn post_json_api<API, Rqs, Rss>(&mut self, pattern: &str, api_struct: API)
+    where
+        C: Clone + Send + Sync + 'static,
+        Rqs: crate::api::Rqs,
+        Rss: serde::Serialize,
+        API: POSTJsonAPI<Context<C>, Rqs, Rss> + Send + Sync + 'static,
+    {
+        let api_struct = api_struct.clone();
+        let handler = {
+            let api_clone = api_struct.clone(); // 必要に応じてclone
+            move |mut c: Context<C>| {
+                // api_cloneを呼び出すためにここでもcloneする、または共有参照を使う
+                let api = api_clone.clone(); 
+                async move {
+                    let req_json_value = c.req.body_json().await.unwrap_or_default();
+                    let req_json: Result<Rqs, serde_json::Error> = serde_json::from_value(req_json_value);
+                    let res = api.handler(&mut c, req_json);
+                    let serialized_res = serde_json::to_value(res).unwrap_or_default();
+                    c.res.json_value(&serialized_res);
+                    Ok(c)
+                }
+            }
+        };
+        self.register_route(Method::POST, pattern, handler);
     }
 
     pub fn get<F, Fut>(&mut self, pattern: &str, handler: F)
