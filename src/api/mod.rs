@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-
 pub trait POSTJsonAPI<C, Rqs, Rss>: Clone
 where
     Rqs: for<'a> Deserialize<'a>,

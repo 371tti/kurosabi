@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use kurosabi::{
-    Kurosabi,
-    html_format,
+    api::GETJsonAPI, html_format, kurosabi::Context, Kurosabi
 };
+use serde::Serialize;
 
 pub struct MyContext {
     pub name: String,
@@ -15,6 +15,38 @@ impl MyContext {
     }
 }
 
+
+
+
+#[derive(Clone)]
+pub struct MyAPI;
+
+#[derive(Serialize)]
+pub struct MyAPIJson {
+    pub name: String,
+    pub version: String,
+}
+
+impl GETJsonAPI<Context<Arc<MyContext>>, MyAPIJson> for MyAPI {
+    fn new() -> Self {
+        MyAPI
+    }
+
+    fn handler(
+            self,
+            c: &mut Context<Arc<MyContext>>,
+        ) -> MyAPIJson {
+
+        let name = c.req.path.get_query("name").unwrap_or("Kurosabi".to_string());
+        let version = c.req.path.get_query("version").unwrap_or("0.1".to_string());
+        
+        MyAPIJson {
+            name,
+            version,
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() {
     env_logger::builder().filter_level(log::LevelFilter::Debug).init();
@@ -22,6 +54,11 @@ async fn main() {
     let arc_context = Arc::new(MyContext::new("Kurosabi".to_string()));
 
     let mut kurosabi = Kurosabi::with_context(arc_context);
+
+    kurosabi.get_json_api("/json", MyAPI::new());
+
+
+
 
     kurosabi.get("/hello",  |mut c| async move {
         c.res.text("Hello, World!");
