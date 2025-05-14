@@ -34,15 +34,15 @@ impl GETJsonAPI<Context<Arc<MyContext>>, MyAPIJson> for MyAPI {
             self,
             c: &mut Context<Arc<MyContext>>,
         ) -> MyAPIJson {
-        println!("heeee");
-        println!("{}: ", c.req.path.get_raw_path());
-        let name = c.req.path.get_query("name").unwrap_or("Kurosabi".to_string());
-        let version = c.req.path.get_query("version").unwrap_or("0.1".to_string());
-        
-        MyAPIJson {
-            name,
-            version,
-        }
+            let name = c.req.path.get_query("name").unwrap_or("Kurosabi".to_string());
+            let version = c.req.path.get_query("version").unwrap_or("0.1".to_string());
+            c.res.header.set("Connection", "keep-alive");
+            c.res.header.set("Keep-Alive", "timeout=60, max=100");
+            
+            MyAPIJson {
+                name,
+                version,
+            }
     }
 }
 
@@ -136,13 +136,15 @@ async fn main() {
         Ok(c)
     });
 
-    kurosabi.get("/*", |mut c| async move {
-        let html: String = html_format!(
-            r#"<h1>{{ name }}</h1>"#,
-            name = c.req.header.get_user_agent().unwrap_or("Unknown"),
+    kurosabi.not_found_handler(|mut c| async move {
+        let html = html_format!(
+            "<h1>404 Not Found</h1>
+            <p>The page you are looking for does not exist.</p>
+            <p>debug: {{data}}</p>",
+            data = c.req.header.get_user_agent().unwrap_or("unknown")
         );
-
         c.res.html(&html);
+        c.res.set_status(404);
         Ok(c)
     });
 

@@ -15,6 +15,7 @@ where
     F: Send + Sync + 'static,
 {
     fn regist(&mut self, method: Method, pattern: &str, excuter: F);
+    fn regist_not_found(&mut self, excuter: F);
     fn build(&mut self);
     fn route(&self, req: &mut Req) -> Option<F>;
 }
@@ -66,6 +67,7 @@ impl<C> Node<C> {
 /* ---------- Router struct ------------------------------------------ */
 pub struct DefaultRouter<C> {
     trees: Map<Method, Box<Node<C>>>,
+    not_found_handler: Option<Arc<BoxedHandler<C>>>,
     sealed: bool,
 }
 
@@ -73,6 +75,7 @@ impl<C> DefaultRouter<C> {
     pub fn new() -> Self {
         Self {
             trees: Map::default(),
+            not_found_handler: None,
             sealed: false,
         }
     }
@@ -80,6 +83,9 @@ impl<C> DefaultRouter<C> {
 
 /* ================= GenRouter impl ================================== */
 impl<C: 'static> GenRouter<Arc<BoxedHandler<C>>> for DefaultRouter<C> {
+    fn regist_not_found(&mut self, excuter: Arc<BoxedHandler<C>>) {
+        self.not_found_handler = Some(excuter);
+    }
     /* ----- regist --------------------------------------------------- */
     fn regist(&mut self, method: Method, pattern: &str, excuter: Arc<BoxedHandler<C>>) {
         assert!(!self.sealed, "router is sealed");
@@ -226,7 +232,13 @@ impl<C: 'static> GenRouter<Arc<BoxedHandler<C>>> for DefaultRouter<C> {
     #[inline]
     fn route(&self, req: &mut Req) -> Option<Arc<BoxedHandler<C>>> {
         let mut node = self.trees.get(&req.method)?.as_ref();
-        let path = req.path.path.clone().trim_start_matches('/').to_string();
+        // クエリとフラグメントを除外してパスだけを取得
+        let full_path = req.path.path.as_str();
+        let path = full_path
+            .split('?').next().unwrap_or(full_path)
+            .split('#').next().unwrap_or(full_path)
+            .trim_start_matches('/')
+            .to_string();
 
         let mut i = 0;
         let mut params: SmallVec<[(&str, (usize, usize)); 4]> = SmallVec::new();
@@ -269,7 +281,12 @@ impl<C: 'static> GenRouter<Arc<BoxedHandler<C>>> for DefaultRouter<C> {
                 node = child;
                 break;
             }
-            return None; // mismatch
+            
+            // 404 Not Found ------------------------------------- */
+            if let Some(handler) = self.not_found_handler.as_ref() {
+                return Some(handler.clone());
+            }
+            return None;
         }
 
         /* phase-2 : 可変借用してセット ------------------------------ */

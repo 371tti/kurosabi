@@ -65,6 +65,23 @@ where
         self.router.regist(method, pattern, std::sync::Arc::new(boxed_handler));
     }
 
+    #[inline]
+    pub fn not_found_handler<F, Fut>(&mut self, handler: F)
+    where
+        F: Fn(Context<C>) -> Fut + Send + Sync + 'static,
+        Fut: std::future::Future<Output = Result<Context<C>, (Context<C>, HttpError)>> + Send + 'static,
+    {
+        let boxed_handler: Box<
+            dyn Fn(
+                Context<C>,
+            ) -> Pin<Box<dyn std::future::Future<Output = Result<Context<C>, (Context<C>, HttpError)>> + Send + 'static>>
+                + Send
+                + Sync,
+        > = Box::new(move |c| Box::pin(handler(c)));
+        self.router.regist_not_found(std::sync::Arc::new(boxed_handler));
+    }
+
+    #[inline]
     pub fn get_json_api<API, Rss>(&mut self, pattern: &str, api_struct: API)
     where
         C: Clone + Send + Sync + 'static,
@@ -88,6 +105,7 @@ where
         self.register_route(Method::GET, pattern, handler);
     }
 
+    #[inline]
     pub fn post_json_api<API, Rqs, Rss>(&mut self, pattern: &str, api_struct: API)
     where
         C: Clone + Send + Sync + 'static,
@@ -274,7 +292,7 @@ where
                     c: Box::new(context_data),
                 };
                 
-                let mut err = HttpError::InternalServerError("http server error".to_string());
+                let mut err = HttpError::CUSTOM(0, "Unclassified".to_string());
                 // ハンドラを実行
                 context = match handler(context).await {
                     Ok(ctx) => ctx,
@@ -323,11 +341,11 @@ where
                 // ルーティングにヒットしなかった場合は 404 を返す
                 let e = HttpError::NotFound;
                 let mut res = e.err_res();
+                res.text("404 Not Found (kurosabi router default err page)");
                 if let Err(e) = res.flush(&mut req).await {
                     error!("Failed to flush 404 response: {:?}", e);
                 }
                 warn!("{}- \x1b[33m{}\x1b[0m\n{}", head_info, res.code, e);
-                break;
             }
         }
         // すべてのリクエスト処理後、接続をクローズ
