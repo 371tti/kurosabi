@@ -1,4 +1,4 @@
-# kurosabi
+# 🔥kurosabi🔥
 
 kurosabiは、Rustの安全性と並列性を活かした、超軽量・高速・シンプルなWebフレームワークです。TypeScript製フレームワーク「hono」にインスパイアされ、Rustで快適なWeb開発体験を提供します。
 

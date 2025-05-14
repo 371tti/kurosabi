@@ -1,4 +1,4 @@
-# Kurosabi
+# 🔥kurosabi🔥
 
 Kurosabi is a blazing fast, lightweight, and simple web framework for Rust, designed to leverage Rust's safety and parallelism. Inspired by the TypeScript framework "hono", Kurosabi aims to provide a productive and enjoyable web development experience.
 
