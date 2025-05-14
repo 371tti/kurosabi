@@ -1,107 +1,172 @@
-# ！！現在開発中です！！
-# 不完全なので注意してください
+# kurosabi
 
-# 🔥kurosabi🔥
+kurosabiは、Rustの安全性と並列性を活かした、超軽量・高速・シンプルなWebフレームワークです。TypeScript製フレームワーク「hono」にインスパイアされ、Rustで快適なWeb開発体験を提供します。
 
-kurosabi は、非常に軽量でシンプルなウェブフレームワークです。Rust の並列性と安全性を活かして設計されています。
-
-## kurosabi とは？
-「kurosabi」とは、日本語で「黒さび」を意味します。  
-このフレームワークは TypeScript のウェブフレームワーク「hono」に触発されて作られました。  
-黒さび「kurosabi」はさびを炎「hono」であぶったらできるわけですよ。。
+---
 
 ## 特徴
-- 非常に軽量で高性能
-- Rust によるメモリ安全性とスレッド安全性
-- Tokio を使用した非同期処理のサポート
-- 簡単なルーティングとミドルウェア管理
-- カスタマイズおよび拡張が容易
+- 超軽量・高速
+- シンプルで表現力の高いルーティング
+- 非同期ハンドラ対応
+- パスパラメータ・ワイルドカード対応
+- JSON・ファイルレスポンス
+- カスタムコンテキスト対応
+- 404やエラー処理が簡単
+- 柔軟なサーバー設定
+
+---
 
 ## インストール
-Cargo.toml に以下の依存関係を追加してください:
+`Cargo.toml`に以下を追加してください：
 
 ```toml
 [dependencies]
-kurosabi = "0.1"  // 最新のバージョンを使用してください
+kurosabi = "0.3.0"
 ```
 
-## 使い方
-以下は詳細な利用例です:
+---
 
+## はじめかた
+
+### 1. カスタムコンテキストの定義（任意）
 ```rust
-// デフォルトのルーターとコンテキストで初期化されます
-let mut kurosabi = Kurosabi::new();
-// let mut custom_kurosabi = Kurosabi::with_contex(...);
+pub struct MyContext {
+    pub name: String,
+}
+impl MyContext {
+    pub fn new(name: String) -> Self {
+        MyContext { name }
+    }
+}
 ```
 
-### ルートの定義
-`get` や `post` などのメソッドを使用してルートを定義できます。例:
-
+### 2. サーバー作成とルート追加
 ```rust
-kurosabi.get("/hello", |mut c| async move {
-    c.res.text("Hello, World!");
-    c.res.set_cookie("session_id", "value");
-    c.res.set_header("X-Custom-Header", "MyValue");
-    c.res.set_status(200);
-    Ok(c)
-});
+use std::{path::PathBuf, sync::Arc};
+use kurosabi::{Kurosabi, kurosabi::Context};
 
-kurosabi.get("/hello/:name", |mut c| async move {
-    let name = c.req.path.get_field("name").unwrap_or("World".to_string());
-    c.res.text(&format!("Hello, {}!", name));
-    c.res.set_status(200);
-    Ok(c)
-});
+#[tokio::main]
+async fn main() {
+    let arc_context = Arc::new(MyContext::new("Kurosabi".to_string()));
+    let mut kurosabi = Kurosabi::with_context(arc_context);
+
+    // シンプルなテキストレスポンス
+    kurosabi.get("/hello", |mut c| async move {
+        c.res.text("Hello, World!");
+        c
+    });
+
+    // パスパラメータ
+    kurosabi.get("/hello/:name", |mut c| async move {
+        let name = c.req.path.get_field("name").unwrap_or("World".to_string());
+        c.res.text(&format!("Hello, {}!", name));
+        c
+    });
+
+    // ワイルドカード
+    kurosabi.get("/wild/*", |mut c| async move {
+        let path = c.req.path.get_field("*").unwrap_or("unknown".to_string());
+        c.res.text(&format!("Wildcard: {}", path));
+        c
+    });
+
+    // JSONレスポンス
+    kurosabi.get("/json", |mut c| async move {
+        let json_data = r#"{"name": "Kurosabi", "version": "0.1"}"#;
+        c.res.json(json_data);
+        c
+    });
+
+    // ファイルレスポンス
+    kurosabi.get("/file", |mut c| async move {
+        let _ = c.res.file(&c.req, PathBuf::from("README.md"), true).await.unwrap();
+        c
+    });
+
+    // フォーム（GET/POST）
+    kurosabi.get("/submit", |mut c| async move {
+        c.res.html(r#"
+        <form action=\"/submit\" method=\"post\">
+            <input type=\"text\" name=\"data\" placeholder=\"データを入力してください\" />
+            <button type=\"submit\">送信</button>
+        </form>
+        "#);
+        c
+    });
+    kurosabi.post("/submit", |mut c| async move {
+        let body = match c.req.body_form().await {
+            Ok(data) => data,
+            Err(_) => {
+                c.res.set_status(400);
+                return c;
+            }
+        };
+        c.res.html(&format!("受信: {:?}", body));
+        c
+    });
+
+    // 404ハンドラ
+    kurosabi.not_found_handler(|mut c| async move {
+        let html = format!(
+            "<h1>404 Not Found</h1>\n<p>ページが見つかりません。</p>\n<p>debug: {}</p>",
+            c.req.header.get_user_agent().unwrap_or("unknown")
+        );
+        c.res.html(&html);
+        c.res.set_status(404);
+        c
+    });
+
+    // サーバー設定
+    let mut server = kurosabi.server()
+        .host([0, 0, 0, 0])
+        .port(8080)
+        .thread(8)
+        .thread_name("kurosabi-worker".to_string())
+        .queue_size(128)
+        .build();
+
+    server.run().await;
+}
 ```
 
-### JSONレスポンス
-簡単にJSONレスポンスを返すことができます:
+---
 
+## 応用機能
+
+### カスタムハンドラによるJSON API
 ```rust
-kurosabi.get("/json", |mut c| async move {
-    let json_data = r#"{"name": "Kurosabi", "version": "0.1"}"#;
-    c.res.json(json_data);
-    Ok(c)
-});
+use kurosabi::api::GETJsonAPI;
+use serde::Serialize;
+
+#[derive(Clone)]
+pub struct MyAPI;
+#[derive(Serialize)]
+pub struct ResJsonSchemaVersion {
+    pub name: String,
+    pub version: String,
+}
+#[derive(Serialize)]
+#[serde(untagged)]
+pub enum ResJsonSchema {
+    Version(ResJsonSchemaVersion),
+    Error(String),
+}
+
+#[async_trait::async_trait]
+impl GETJsonAPI<Context<Arc<MyContext>>, ResJsonSchema> for MyAPI {
+    fn new() -> Self { MyAPI }
+    async fn handler(self, c: &mut Context<Arc<MyContext>>) -> ResJsonSchema {
+        let name = c.req.path.get_query("name").unwrap_or("Kurosabi".to_string());
+        let version = c.req.path.get_query("version").unwrap_or("0.1".to_string());
+        ResJsonSchema::Version(ResJsonSchemaVersion { name, version })
+    }
+}
+
+// APIルートの登録
+kurosabi.get_json_api("/jsonapi", MyAPI::new());
 ```
 
-### フォーム処理
-HTMLフォームを提供し、フォーム送信を処理します:
+---
 
-```rust
-kurosabi.get("/submit", |mut c| async move {
-    c.res.html(r#"
-    <form action="/submit" method="post">
-        <input type="text" name="data" placeholder="データを入力してください" />
-        <button type="submit">送信</button>
-    </form>
-    "#);
-    Ok(c)
-});
-
-kurosabi.post("/submit", |mut c| async move {
-    let body = c.req.body_string().await.unwrap_or_default();
-    println!("受信したPOSTデータ: {}", body);
-    c.res.html(&format!("受信: {}", body));
-    Ok(c)
-});
-```
-
-### サーバ設定
-カスタム設定でサーバを構成します:
-
-```rust
-let mut server = kurosabi.server()
-    .host([0, 0, 0, 0])
-    .port(80)
-    .thread(4)
-    .thread_name("kurosabi-worker".to_string())
-    .queue_size(128)
-    .build();
-
-server.run().await;
-```
-
-## コントリビューション
-貢献は大歓迎です！  
-プロジェクトのコーディングスタイルに従い、大きな変更については事前に issue を立てて議論してください。
+## ライセンス
+MIT
