@@ -189,3 +189,28 @@ impl Header {
         }
     }
 }
+
+impl Header {
+    #[inline]
+    pub fn get_accept_encoding_vec(&self) -> Option<Vec<&str>> {
+        let accept_encoding = self.get("ACCEPT-ENCODING")?;
+        let mut encodings: Vec<(&str, f32)> = accept_encoding
+            .split(',')
+            .map(|s| {
+                let mut parts = s.trim().split(';');
+                let encoding = parts.next().unwrap_or("").trim();
+                let q_value = parts
+                    .find(|p| p.trim().starts_with("q="))
+                    .and_then(|q| q.trim().strip_prefix("q=").and_then(|v| v.parse::<f32>().ok()))
+                    .unwrap_or(1.0); // デフォルトの品質値は1.0
+                (encoding, q_value)
+            })
+            .collect();
+    
+        // 品質値で降順にソート
+        encodings.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    
+        // エンコーディング名のみを抽出して返す
+        Some(encodings.into_iter().map(|(encoding, _)| encoding).collect())
+    }
+}

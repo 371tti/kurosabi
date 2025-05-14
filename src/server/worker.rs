@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crossbeam_queue::ArrayQueue;
-use log::error;
+use log::{debug, error};
 use tokio::sync::Notify;
 
 use super::TcpConnection;
@@ -24,14 +24,14 @@ impl<W: Worker> WorkerPool<W> {
     #[inline]
     pub async fn main_loop(self: Arc<Self>) {
         loop {
-            // タスクキューからコネクションを取り出して処理する
-            while let Some(connection) = self.task_queue.pop() {
-                self.handle_connection(connection).await;
-                
-            }
-
             // タスクキューが空の場合は、ワーカーをスリープさせる
             self.notifier.notified().await;
+
+            // タスクキューからコネクションを取り出して処理する
+            while let Some(connection) = self.task_queue.pop() {
+                debug!("Created new connection");
+                self.handle_connection(connection).await;
+            }
         }
     }
 
@@ -58,5 +58,7 @@ impl<W: Worker> WorkerPool<W> {
 
 #[async_trait::async_trait]
 pub trait Worker: Send + Sync {
+    /// ワーカーのメイン処理
+    /// コネクションを受け取り、処理を行う
     async fn execute(&self, connection: TcpConnection);
 }

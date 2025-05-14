@@ -53,28 +53,108 @@ where
     fn register_route<F, Fut>(&mut self, method: Method, pattern: &str, handler: F)
     where
         F: Fn(Context<C>) -> Fut + Send + Sync + 'static,
-        Fut: std::future::Future<Output = Result<Context<C>, (Context<C>, HttpError)>> + Send + 'static,
+        Fut: std::future::Future<Output = Context<C>> + Send + 'static,
     {
         let boxed_handler: Box<
             dyn Fn(
                 Context<C>,
-            ) -> Pin<Box<dyn std::future::Future<Output = Result<Context<C>, (Context<C>, HttpError)>> + Send + 'static>>
+            ) -> Pin<Box<dyn std::future::Future<Output = Context<C>> + Send + 'static>>
                 + Send
                 + Sync,
         > = Box::new(move |c| Box::pin(handler(c)));
         self.router.regist(method, pattern, std::sync::Arc::new(boxed_handler));
     }
 
+    pub fn get<F, Fut>(&mut self, pattern: &str, handler: F)
+    where
+        F: Fn(Context<C>) -> Fut + Send + Sync + 'static,
+        Fut: std::future::Future<Output = Context<C>> + Send + 'static,
+    {
+        self.register_route(Method::GET, pattern, handler);
+    }
+
+    pub fn post<F, Fut>(&mut self, pattern: &str, handler: F)
+    where
+        F: Fn(Context<C>) -> Fut + Send + Sync + 'static,
+        Fut: std::future::Future<Output = Context<C>> + Send + 'static,
+    {
+        self.register_route(Method::POST, pattern, handler);
+    }
+
+    pub fn put<F, Fut>(&mut self, pattern: &str, handler: F)
+    where
+        F: Fn(Context<C>) -> Fut + Send + Sync + 'static,
+        Fut: std::future::Future<Output = Context<C>> + Send + 'static,
+    {
+        self.register_route(Method::PUT, pattern, handler);
+    }
+
+    pub fn delete<F, Fut>(&mut self, pattern: &str, handler: F)
+    where
+        F: Fn(Context<C>) -> Fut + Send + Sync + 'static,
+        Fut: std::future::Future<Output = Context<C>> + Send + 'static,
+    {
+        self.register_route(Method::DELETE, pattern, handler);
+    }
+
+    pub fn patch<F, Fut>(&mut self, pattern: &str, handler: F)
+    where
+        F: Fn(Context<C>) -> Fut + Send + Sync + 'static,
+        Fut: std::future::Future<Output = Context<C>> + Send + 'static,
+    {
+        self.register_route(Method::PATCH, pattern, handler);
+    }
+
+    pub fn options<F, Fut>(&mut self, pattern: &str, handler: F)
+    where
+        F: Fn(Context<C>) -> Fut + Send + Sync + 'static,
+        Fut: std::future::Future<Output = Context<C>> + Send + 'static,
+    {
+        self.register_route(Method::OPTIONS, pattern, handler);
+    }
+
+    pub fn trace<F, Fut>(&mut self, pattern: &str, handler: F)
+    where
+        F: Fn(Context<C>) -> Fut + Send + Sync + 'static,
+        Fut: std::future::Future<Output = Context<C>> + Send + 'static,
+    {
+        self.register_route(Method::TRACE, pattern, handler);
+    }
+
+    pub fn head<F, Fut>(&mut self, pattern: &str, handler: F)
+    where
+        F: Fn(Context<C>) -> Fut + Send + Sync + 'static,
+        Fut: std::future::Future<Output = Context<C>> + Send + 'static,
+    {
+        self.register_route(Method::HEAD, pattern, handler);
+    }
+
+    pub fn connect<F, Fut>(&mut self, pattern: &str, handler: F)
+    where
+        F: Fn(Context<C>) -> Fut + Send + Sync + 'static,
+        Fut: std::future::Future<Output = Context<C>> + Send + 'static,
+    {
+        self.register_route(Method::CONNECT, pattern, handler);
+    }
+
+    pub fn any<F, Fut>(&mut self, pattern: &str, handler: F)
+    where
+        F: Fn(Context<C>) -> Fut + Send + Sync + 'static,
+        Fut: std::future::Future<Output = Context<C>> + Send + 'static,
+    {
+        self.register_route(Method::UNKNOWN("OTHER".to_string()), pattern, handler);
+    }
+
     #[inline]
     pub fn not_found_handler<F, Fut>(&mut self, handler: F)
     where
         F: Fn(Context<C>) -> Fut + Send + Sync + 'static,
-        Fut: std::future::Future<Output = Result<Context<C>, (Context<C>, HttpError)>> + Send + 'static,
+        Fut: std::future::Future<Output = Context<C>> + Send + 'static,
     {
         let boxed_handler: Box<
             dyn Fn(
                 Context<C>,
-            ) -> Pin<Box<dyn std::future::Future<Output = Result<Context<C>, (Context<C>, HttpError)>> + Send + 'static>>
+            ) -> Pin<Box<dyn std::future::Future<Output = Context<C>> + Send + 'static>>
                 + Send
                 + Sync,
         > = Box::new(move |c| Box::pin(handler(c)));
@@ -95,10 +175,10 @@ where
                 // api_cloneを呼び出すためにここでもcloneする、または共有参照を使う
                 let api = api_clone.clone(); 
                 async move {
-                    let res = api.handler(&mut c);
+                    let res = api.handler(&mut c).await;
                     let serialized_res = serde_json::to_value(res).unwrap_or_default();
                     c.res.json_value(&serialized_res);
-                    Ok(c)
+                    c
                 }
             }
         };
@@ -109,7 +189,7 @@ where
     pub fn post_json_api<API, Rqs, Rss>(&mut self, pattern: &str, api_struct: API)
     where
         C: Clone + Send + Sync + 'static,
-        Rqs: crate::api::Rqs,
+        Rqs: for<'a> serde::Deserialize<'a>,
         Rss: serde::Serialize,
         API: POSTJsonAPI<Context<C>, Rqs, Rss> + Send + Sync + 'static,
     {
@@ -122,98 +202,17 @@ where
                 async move {
                     let req_json_value = c.req.body_json().await.unwrap_or_default();
                     let req_json: Result<Rqs, serde_json::Error> = serde_json::from_value(req_json_value);
-                    let res = api.handler(&mut c, req_json);
+                    let res = api.handler(&mut c, req_json).await;
                     let serialized_res = serde_json::to_value(res).unwrap_or_default();
                     c.res.json_value(&serialized_res);
-                    Ok(c)
+                    c
                 }
             }
         };
         self.register_route(Method::POST, pattern, handler);
     }
-
-    pub fn get<F, Fut>(&mut self, pattern: &str, handler: F)
-    where
-        F: Fn(Context<C>) -> Fut + Send + Sync + 'static,
-        Fut: std::future::Future<Output = Result<Context<C>, (Context<C>, HttpError)>> + Send + 'static,
-    {
-        self.register_route(Method::GET, pattern, handler);
-    }
-
-    pub fn post<F, Fut>(&mut self, pattern: &str, handler: F)
-    where
-        F: Fn(Context<C>) -> Fut + Send + Sync + 'static,
-        Fut: std::future::Future<Output = Result<Context<C>, (Context<C>, HttpError)>> + Send + 'static,
-    {
-        self.register_route(Method::POST, pattern, handler);
-    }
-
-    pub fn put<F, Fut>(&mut self, pattern: &str, handler: F)
-    where
-        F: Fn(Context<C>) -> Fut + Send + Sync + 'static,
-        Fut: std::future::Future<Output = Result<Context<C>, (Context<C>, HttpError)>> + Send + 'static,
-    {
-        self.register_route(Method::PUT, pattern, handler);
-    }
-
-    pub fn delete<F, Fut>(&mut self, pattern: &str, handler: F)
-    where
-        F: Fn(Context<C>) -> Fut + Send + Sync + 'static,
-        Fut: std::future::Future<Output = Result<Context<C>, (Context<C>, HttpError)>> + Send + 'static,
-    {
-        self.register_route(Method::DELETE, pattern, handler);
-    }
-
-    pub fn patch<F, Fut>(&mut self, pattern: &str, handler: F)
-    where
-        F: Fn(Context<C>) -> Fut + Send + Sync + 'static,
-        Fut: std::future::Future<Output = Result<Context<C>, (Context<C>, HttpError)>> + Send + 'static,
-    {
-        self.register_route(Method::PATCH, pattern, handler);
-    }
-
-    pub fn options<F, Fut>(&mut self, pattern: &str, handler: F)
-    where
-        F: Fn(Context<C>) -> Fut + Send + Sync + 'static,
-        Fut: std::future::Future<Output = Result<Context<C>, (Context<C>, HttpError)>> + Send + 'static,
-    {
-        self.register_route(Method::OPTIONS, pattern, handler);
-    }
-
-    pub fn trace<F, Fut>(&mut self, pattern: &str, handler: F)
-    where
-        F: Fn(Context<C>) -> Fut + Send + Sync + 'static,
-        Fut: std::future::Future<Output = Result<Context<C>, (Context<C>, HttpError)>> + Send + 'static,
-    {
-        self.register_route(Method::TRACE, pattern, handler);
-    }
-
-    pub fn head<F, Fut>(&mut self, pattern: &str, handler: F)
-    where
-        F: Fn(Context<C>) -> Fut + Send + Sync + 'static,
-        Fut: std::future::Future<Output = Result<Context<C>, (Context<C>, HttpError)>> + Send + 'static,
-    {
-        self.register_route(Method::HEAD, pattern, handler);
-    }
-
-    pub fn connect<F, Fut>(&mut self, pattern: &str, handler: F)
-    where
-        F: Fn(Context<C>) -> Fut + Send + Sync + 'static,
-        Fut: std::future::Future<Output = Result<Context<C>, (Context<C>, HttpError)>> + Send + 'static,
-    {
-        self.register_route(Method::CONNECT, pattern, handler);
-    }
-
-    pub fn any<F, Fut>(&mut self, pattern: &str, handler: F)
-    where
-        F: Fn(Context<C>) -> Fut + Send + Sync + 'static,
-        Fut: std::future::Future<Output = Result<Context<C>, (Context<C>, HttpError)>> + Send + 'static,
-    {
-        self.register_route(Method::UNKNOWN("OTHER".to_string()), pattern, handler);
-    }
-
-
-
+    
+    /// ルーターをビルドしてサーバーを生成する
     pub fn server(mut self) -> KurosabiServerBuilder<DefaultWorker<C, R>> {
         self.router.build();
         let worker = std::sync::Arc::new(DefaultWorker::new(std::sync::Arc::new(self.router), std::sync::Arc::new(self.context)));
@@ -292,16 +291,8 @@ where
                     c: Box::new(context_data),
                 };
                 
-                let mut err = HttpError::CUSTOM(0, "Unclassified".to_string());
                 // ハンドラを実行
-                context = match handler(context).await {
-                    Ok(ctx) => ctx,
-                    Err((mut ctx, e)) => {
-                        err = e;
-                        ctx.res = err.err_res();
-                        ctx
-                    }
-                };
+                context = handler(context).await;
 
                 let ps_time = ps_time.elapsed();
                 
@@ -319,9 +310,9 @@ where
 
                 // ログ出力（レスポンスコードに応じて色分け）
                 if context.res.code >= 500 {
-                    error!("{}- \x1b[31m{}\x1b[0m\n{}", head_info, context.res.code, err);
+                    error!("{}- \x1b[31m{}\x1b[0m", head_info, context.res.code);
                 } else if context.res.code >= 400 {
-                    warn!("{}- \x1b[33m{}\x1b[0m\n{}", head_info, context.res.code, err);
+                    warn!("{}- \x1b[33m{}\x1b[0m", head_info, context.res.code);
                 } else if context.res.code >= 300 {
                     info!("{}- \x1b[34m{}\x1b[0m", head_info, context.res.code);
                 } else if context.res.code >= 200 {

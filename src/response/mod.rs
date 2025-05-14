@@ -4,11 +4,12 @@ use std::path::Path;
 use std::pin::Pin;
 
 use tokio::fs::File;
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncSeekExt};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncSeekExt, AsyncWrite};
 use tokio_util::io::ReaderStream;
 
 use tokio::io::AsyncWriteExt;
 use mime_guess::from_path;
+use async_compression::tokio::write::BrotliEncoder;
 
 use crate::error::HttpError;
 use crate::request::Req;
@@ -21,6 +22,7 @@ pub struct Res {
     pub header: Header,
     /// ボディ
     pub body: Body,
+    pub compress_enabled: bool,
 }
 
 /// レスポンス構築するやつ
@@ -131,6 +133,7 @@ impl Res {
         &mut self,
         req: &Req,
         path: P,
+        inline: bool,
     ) -> Result<&mut Self, HttpError> {
         let path = path.as_ref();
 
@@ -153,7 +156,7 @@ impl Res {
         /* ---------- Content-Disposition -------------- */
         if let Some(fname) = path.file_name().and_then(OsStr::to_str) {
             self.header
-                .set("Content-Disposition", &format!("attachment; filename=\"{}\"", fname));
+                .set("Content-Disposition", &format!("{}; filename=\"{}\"", if inline { "inline" } else { "attachment" }, fname));
         }
 
         /* ---------- Range 解析 ----------------------- */
@@ -225,34 +228,38 @@ impl Res {
             code: 200,
             header: Header::new(),
             body: Body::Empty,
+            compress_enabled: true,
         }
     }
 
     #[inline]
+    pub fn decide_compression(&mut self, req: &Req) -> Compression {
+        if self.compress_enabled == false {
+            return Compression::NotCompressed;
+        }
+        
+        // Accept-Encoding ヘッダを取得
+        if let Some(encoding_list) = req.header.get_accept_encoding_vec() {
+            if encoding_list.contains(&"br") {
+                return Compression::BrOptimal;
+            }
+        }
+        return Compression::NotCompressed;
+    }
+
+    #[inline]
     pub async fn flush(&mut self, req: &mut Req) -> Result<(), KurosabiError> {
+        self.header.set("Server", "Kurosabi");
+        let compression = self.decide_compression(req);
+        self.body.compress(&mut self.header, compression).await;
         let writer = req.connection.writer();
         writer.write_all(format!("HTTP/1.1 {}\r\n", self.code).as_bytes()).await.map_err(|e| KurosabiError::IoError(e))?;
         for (key, value) in &self.header.headers {
             writer.write_all(format!("{}: {}\r\n", key, value).as_bytes()).await.map_err(|e| KurosabiError::IoError(e))?;
         }
         writer.write_all(b"\r\n").await.map_err(|e| KurosabiError::IoError(e))?;
-        
-        match &mut self.body {
-            Body::Empty => (),
-            Body::Text(text) => writer.write_all(text.as_bytes()).await.map_err(|e| KurosabiError::IoError(e))?,
-            Body::Binary(data) => writer.write_all(data).await.map_err(|e| KurosabiError::IoError(e))?,
-            Body::Stream(stream) => {
-                let mut reader = tokio::io::BufReader::new(stream);
-                let mut buffer = [0; 8192];
-                loop {
-                    let n = reader.read(&mut buffer).await.map_err(|e| KurosabiError::IoError(e))?;
-                    if n == 0 {
-                        break;
-                    }
-                    writer.write_all(&buffer[..n]).await.map_err(|e| KurosabiError::IoError(e))?;
-                }
-            }
-        }
+
+        self.body.compress_to_stream(Compression::NotCompressed, writer).await?;
 
         writer.flush().await.map_err(|e| KurosabiError::IoError(e))?;
         Ok(())
@@ -265,4 +272,167 @@ pub enum Body {
     Text(String),
     Binary(Vec<u8>),
     Stream(Pin<Box<dyn AsyncRead + Send + Sync>>),
+}
+
+pub enum Compression {
+    NotCompressed,
+    BrOptimal,
+    BrMid,
+    BrLow,
+    BrHi,
+}
+
+impl Body {
+    #[inline]
+    pub fn size(&self) -> usize {
+        match self {
+            Body::Empty => 0,
+            Body::Text(text) => text.len(),
+            Body::Binary(data) => data.len(),
+            Body::Stream(_stream) => {
+                // ストリームのサイズは不明
+                // ここでは0を返す -> 非圧縮
+                0
+            }
+        }
+    }
+
+    #[inline]
+    pub async fn compress(
+        &mut self,
+        header: &mut Header,
+        encoding: Compression,
+    ) {
+        match encoding {
+            Compression::BrMid | Compression::BrLow | Compression::BrHi | Compression::BrOptimal => {
+                // Brotli圧縮を行う
+                let level = match encoding {
+                    Compression::BrMid => 5,
+                    Compression::BrLow => 1,
+                    Compression::BrHi => 11,
+                    Compression::BrOptimal => {
+                        // 最適なレベルを選択
+                        let size: usize = self.size();
+                        let pow_2_size = size.checked_mul(size).unwrap_or(usize::MAX).max(1);
+                        let level = (pow_2_size / 102400000).min(11);
+                        println!("pow_2_size: {}, level: {}", pow_2_size, level);
+                        if level == 0 {
+                            return;
+                        }
+                        level
+                    }
+                    _ => unreachable!(),
+                };
+                let mut encoder = BrotliEncoder::with_quality(Vec::new(), async_compression::Level::Precise(level as i32));
+
+                match self {
+                    Body::Text(text) => {
+                        encoder.write_all(text.as_bytes()).await.ok();
+                        encoder.shutdown().await.ok();
+                        let compressed = encoder.into_inner();
+                        header.set("Content-Encoding", "br");
+                        header.del("Content-Length");
+                        header.set("Content-Length", &compressed.len().to_string());
+                        header.set("X-Compression", &level.to_string());
+                        *self = Body::Binary(compressed);
+                    }
+                    Body::Binary(data) => {
+                        encoder.write_all(data).await.ok();
+                        encoder.shutdown().await.ok();
+                        let compressed = encoder.into_inner();
+                        header.set("Content-Encoding", "br");
+                        header.del("Content-Length");
+                        header.set("Content-Length", &compressed.len().to_string());
+                        header.set("X-Compression", &level.to_string());
+                        *self = Body::Binary(compressed);
+                    }
+                    _ => {}
+                }
+            }
+            _ => { }
+        }
+    }
+
+    #[inline]
+    pub async fn compress_to_stream<W>(
+        &mut self,
+        encoding: Compression,
+        writer: &mut W,
+    ) -> Result<(), KurosabiError>
+    where
+        W: AsyncWrite + Unpin,
+    {
+        match encoding {
+            Compression::NotCompressed => {
+                // 圧縮しない場合はそのまま書き込み
+                match self {
+                    Body::Text(text) => {
+                        writer.write_all(text.as_bytes()).await.map_err(|e| KurosabiError::IoError(e))?;
+                    }
+                    Body::Binary(data) => {
+                        writer.write_all(data).await.map_err(|e| KurosabiError::IoError(e))?;
+                    }
+                    Body::Stream(stream) => {
+                        let mut reader = tokio::io::BufReader::new(stream);
+                        let mut buffer = [0; 8192];
+                        loop {
+                            let n = reader.read(&mut buffer).await.map_err(|e| KurosabiError::IoError(e))?;
+                            if n == 0 {
+                                break;
+                            }
+                            writer.write_all(&buffer[..n]).await.map_err(|e| KurosabiError::IoError(e))?;
+                        }
+                    }
+                    _ => {}
+                }
+                Ok(())
+            }
+            Compression::BrMid | Compression::BrLow | Compression::BrHi | Compression::BrOptimal => {
+                // Brotli圧縮を行う
+                let level = match encoding {
+                    Compression::BrMid => 5,
+                    Compression::BrLow => 1,
+                    Compression::BrHi => 11,
+                    Compression::BrOptimal => {
+                        // 最適なレベルを選択
+                        // 感覚的に大体だした2次関数ね
+                        let size: usize = self.size();
+                        let pow_2_size = size.checked_next_power_of_two().unwrap_or(usize::MAX).max(1);
+                        let level = ((pow_2_size / 89600000) + 1).max(11);
+                        level
+                    }
+                    _ => unreachable!(),
+                };
+                let mut encoder = BrotliEncoder::with_quality(writer, async_compression::Level::Precise(level as i32));
+
+                match self {
+                    Body::Text(text) => {
+                        // テキストデータを圧縮して書き込み
+                        encoder.write_all(text.as_bytes()).await.map_err(|e| KurosabiError::IoError(e))?;
+                    }
+                    Body::Binary(data) => {
+                        // バイナリデータを圧縮して書き込み
+                        encoder.write_all(data).await.map_err(|e| KurosabiError::IoError(e))?;
+                    }
+                    Body::Stream(stream) => {
+                        // ストリームデータを圧縮して書き込み
+                        let mut reader = tokio::io::BufReader::new(stream);
+                        let mut buffer = [0; 8192];
+                        loop {
+                            let n = reader.read(&mut buffer).await.map_err(|e| KurosabiError::IoError(e))?;
+                            if n == 0 {
+                                break;
+                            }
+                            encoder.write_all(&buffer[..n]).await.map_err(|e| KurosabiError::IoError(e))?;
+                        }
+                    }
+                    _ => {}
+                }
+        
+                // 圧縮ストリームを終了
+                encoder.shutdown().await.map_err(|e| KurosabiError::IoError(e))?;
+                Ok(())
+            }
+        }
+    }
 }

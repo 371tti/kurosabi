@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
 use kurosabi::{
     api::GETJsonAPI, html_format, kurosabi::Context, Kurosabi
@@ -20,29 +20,39 @@ impl MyContext {
 pub struct MyAPI;
 
 #[derive(Serialize)]
-pub struct MyAPIJson {
+pub struct ResJsonSchemaVersion {
     pub name: String,
     pub version: String,
 }
 
-impl GETJsonAPI<Context<Arc<MyContext>>, MyAPIJson> for MyAPI {
+#[derive(Serialize)]
+#[serde(untagged)]
+pub enum ResJsonSchema {
+    Version(ResJsonSchemaVersion),
+    Error(String),
+}
+
+#[async_trait::async_trait]
+impl GETJsonAPI<Context<Arc<MyContext>>, ResJsonSchema> for MyAPI {
     fn new() -> Self {
         MyAPI
     }
 
-    fn handler(
+    async fn handler(
             self,
             c: &mut Context<Arc<MyContext>>,
-        ) -> MyAPIJson {
+        ) -> ResJsonSchema {
             let name = c.req.path.get_query("name").unwrap_or("Kurosabi".to_string());
             let version = c.req.path.get_query("version").unwrap_or("0.1".to_string());
             c.res.header.set("Connection", "keep-alive");
             c.res.header.set("Keep-Alive", "timeout=60, max=100");
             
-            MyAPIJson {
-                name,
-                version,
-            }
+            ResJsonSchema::Version(
+                ResJsonSchemaVersion {
+                    name: name,
+                    version: version,
+                }
+            )
     }
 }
 
@@ -56,7 +66,10 @@ async fn main() {
 
     kurosabi.get_json_api("/jsonapi", MyAPI::new());
 
-
+    kurosabi.get("/file", |mut c| async move {
+        let _ = c.res.file(&c.req, PathBuf::from("README.md"), true).await.unwrap();
+        c
+    });
 
 
     kurosabi.get("/hello",  |mut c| async move {
@@ -66,33 +79,32 @@ async fn main() {
         c.res.header.set_cookie(key, value);
         c.res.header.set("X-Custom-Header", "MyValue");
         c.res.set_status(200);
-        Ok(c)
+        c
     });
 
     kurosabi.get("/hello/:name", |mut c| async move {
         let name = c.req.path.get_field("name").unwrap_or("World".to_string());
         c.res.text(&format!("Hello, {}!", name));
-        c.res.set_status(200);
-        Ok(c)
+        c
     });
 
     kurosabi.get("/json", |mut c| async move {
         let json_data = r#"{"name": "Kurosabi", "version": "0.1"}"#;
         c.res.json(json_data);
-        Ok(c)
+        c
     });
 
     kurosabi.get("/field/:field/:value", |mut c| async move {
         let field = c.req.path.get_field("field").unwrap_or("unknown".to_string());
         let value = c.req.path.get_field("value").unwrap_or("unknown".to_string());
         c.res.text(&format!("Field: {}, Value: {}", field, value));
-        Ok(c)
+        c
     });
 
     kurosabi.get("/gurd/*", |mut c| async move {
         let path = c.req.path.get_field("*").unwrap_or("unknown".to_string());
         c.res.text(&format!("Gurd: {}", path));
-        Ok(c)
+        c
     });
 
     kurosabi.post("/submit", |mut c| async move {
@@ -101,12 +113,11 @@ async fn main() {
             Err(e) => {
                 println!("Error receiving POST data: {}", e);
                 c.res.set_status(400);
-                return Ok(c);
+                return c;
             }
         };
-        println!("Received POST data: {:?}", body);
         c.res.html(&format!("Received: {:?}", body));
-        Ok(c)
+        c
     });
 
     kurosabi.get("/submit", |mut c| async move {
@@ -116,7 +127,7 @@ async fn main() {
             <button type="submit">Submit</button>
         </form>
         "#);
-        Ok(c)
+        c
     });
 
     kurosabi.get("/", |mut c| async move {
@@ -133,7 +144,7 @@ async fn main() {
             <li><a href="/gurd/*">/gurd/*</a></li>
         </ul>
         "#);
-        Ok(c)
+        c
     });
 
     kurosabi.not_found_handler(|mut c| async move {
@@ -145,9 +156,18 @@ async fn main() {
         );
         c.res.html(&html);
         c.res.set_status(404);
-        Ok(c)
+        c
     });
 
+    kurosabi.get("/loopA", |mut c| async move {
+        c.res.html("<a href=\"/loopB\">loopA</a>");
+        c
+    });
+
+    kurosabi.get("/loopB", |mut c| async move {
+        c.res.html("<a href=\"/loopA\">loopB</a>");
+        c
+    });
 
     let mut server = kurosabi.server()
         .host([0, 0, 0, 0])

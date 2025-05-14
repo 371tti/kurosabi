@@ -1,8 +1,8 @@
 pub mod worker;
 
-use std::{net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 
-use socket2::{Domain, Protocol, Socket};
+use socket2::{Domain, Protocol, Socket, TcpKeepalive};
 use tokio::{self, io::AsyncWriteExt};
 use log::info;
 use worker::{Worker, WorkerPool};
@@ -18,16 +18,142 @@ pub struct KurosabiServerBuilder<W> {
     prc_worker: Arc<W>,
 }
 
+/// Configuration for the Kurosabi server.
+///
+/// This struct contains various settings for the server, such as host, port, thread count,
+/// buffer sizes, and keep-alive options. These configurations allow fine-grained control
+/// over the server's behavior and performance.
+///
+/// Kurosabiサーバーの設定。
+///
+/// この構造体は、サーバーのホスト、ポート、スレッド数、バッファサイズ、
+/// Keep-Aliveオプションなど、さまざまな設定を保持します。
+/// これらの設定により、サーバーの動作やパフォーマンスを細かく制御できます。
 #[derive(Clone)]
 pub struct KurosabiConfig {
+    /// The IP address of the server.
+    ///
+    /// This specifies the address the server will bind to. For example, `[127, 0, 0, 1]` binds
+    /// the server to localhost, while `[0, 0, 0, 0]` binds it to all available network interfaces.
+    ///
+    /// サーバーのIPアドレス。
+    ///
+    /// サーバーがバインドするアドレスを指定します。例: `[127, 0, 0, 1]`はローカルホスト、
+    /// `[0, 0, 0, 0]`は全てのネットワークインターフェースにバインドします。
     host: [u8; 4],
+    /// The port number the server will listen on.
+    ///
+    /// This determines the port where the server will accept incoming connections.
+    ///
+    /// サーバーがリッスンするポート番号。
+    ///
+    /// サーバーが接続を受け付けるポートを指定します。
     port: u16,
+    /// The number of threads to use for the server.
+    ///
+    /// This controls the number of worker threads that will handle incoming requests.
+    ///
+    /// サーバーで使用するスレッド数。
+    ///
+    /// リクエストを処理するワーカースレッドの数を指定します。
     thread: usize,
+    /// The name of the worker threads.
+    ///
+    /// This is used to identify the worker threads in logs or debugging tools.
+    ///
+    /// ワーカースレッドの名前。
+    ///
+    /// ログやデバッグツールでスレッドを識別するために使用されます。
     thread_name: String,
+    /// The size of the task queue for the worker pool.
+    ///
+    /// This defines how many tasks can be queued for processing before new tasks are rejected.
+    ///
+    /// ワーカープールのタスクキューサイズ。
+    ///
+    /// 新しいタスクが拒否されるまでにキューできるタスク数を指定します。
     queue_size: usize,
+    /// Whether to allow the reuse of local addresses.
+    ///
+    /// If enabled, the server can bind to an address that is in a TIME_WAIT state.
+    ///
+    /// ローカルアドレスの再利用を許可するかどうか。
+    ///
+    /// 有効にすると、TIME_WAIT状態のアドレスにもバインドできます。
+    reuse_address: bool,
+    /// Whether to disable Nagle's algorithm for the socket.
+    ///
+    /// Disabling Nagle's algorithm can reduce latency for small packets by sending them immediately.
+    ///
+    /// ソケットのNagleアルゴリズムを無効化するかどうか。
+    ///
+    /// 無効化すると、小さなパケットを即時送信し、遅延を減らせます。
+    nodelay: bool,
+    /// The maximum number of pending connections in the backlog.
+    ///
+    /// This sets the maximum number of connections that can be queued before the server starts rejecting new ones.
+    ///
+    /// バックログの最大保留接続数。
+    ///
+    /// サーバーが新しい接続を拒否するまでにキューできる最大接続数を指定します。
+    backlog: usize,
+    /// The size of the send buffer for the socket, in bytes.
+    ///
+    /// This controls the amount of data that can be buffered for sending before the socket blocks.
+    ///
+    /// ソケットの送信バッファサイズ（バイト単位）。
+    ///
+    /// ソケットがブロックする前に送信できるデータ量を制御します。
+    send_buffer_size: usize,
+    /// The size of the receive buffer for the socket, in bytes.
+    ///
+    /// This controls the amount of data that can be buffered for receiving before the socket blocks.
+    ///
+    /// ソケットの受信バッファサイズ（バイト単位）。
+    ///
+    /// ソケットがブロックする前に受信できるデータ量を制御します。
+    recv_buffer_size: usize,
+    /// Whether to enable TCP keep-alive.
+    ///
+    /// If enabled, the server will periodically send keep-alive packets to ensure the connection is still active.
+    ///
+    /// TCP Keep-Aliveを有効にするかどうか。
+    ///
+    /// 有効にすると、サーバーは定期的にKeep-Aliveパケットを送信し、接続が生きているか確認します。
+    keepalive_enabled: bool,
+    /// The idle time before the first keep-alive packet is sent.
+    ///
+    /// This specifies how long the connection can remain idle before the first keep-alive packet is sent.
+    ///
+    /// 最初のKeep-Aliveパケット送信までのアイドル時間。
+    ///
+    /// 接続がアイドル状態になってから最初のKeep-Aliveパケットを送信するまでの時間を指定します。
+    keepalive_time: Duration,
+    /// The interval between subsequent keep-alive packets.
+    ///
+    /// This specifies the time between keep-alive packets after the first one is sent.
+    ///
+    /// 2回目以降のKeep-Aliveパケット送信間隔。
+    ///
+    /// 最初の送信以降、Keep-Aliveパケットを送信する間隔を指定します。
+    keepalive_interval: Duration,
 }
 
 impl<W: Worker + 'static> KurosabiServerBuilder<W> {
+    /// Creates a new `KurosabiServerBuilder` with default configuration.
+    ///
+    /// # Arguments
+    /// * `worker` - An `Arc` containing the worker implementation.
+    ///
+    /// This initializes the server builder with default settings, which can be customized
+    /// using the provided builder methods.
+    ///
+    /// デフォルト設定で`KurosabiServerBuilder`を作成します。
+    ///
+    /// # 引数
+    /// * `worker` - ワーカー実装を格納した`Arc`。
+    ///
+    /// このメソッドは、ビルダーメソッドでカスタマイズ可能なデフォルト設定で初期化します。
     pub fn new(worker: Arc<W>) -> KurosabiServerBuilder<W> {
         KurosabiServerBuilder {
             config: KurosabiConfig {
@@ -36,42 +162,257 @@ impl<W: Worker + 'static> KurosabiServerBuilder<W> {
                 thread: 4,
                 thread_name: "kurosabi-worker".to_string(),
                 queue_size: 128,
+                reuse_address: true,
+                nodelay: true,
+                backlog: 1024,
+                send_buffer_size: 64 * 1024,
+                recv_buffer_size: 64 * 1024,
+                keepalive_enabled: true,
+                keepalive_time: Duration::from_secs(30),
+                keepalive_interval: Duration::from_secs(10),
             },
             prc_worker: worker,
         }
     }
 
-    /// サーバーのホストを設定する
+    /// Sets the host address for the server.
+    /// 
+    /// # Arguments
+    /// * `host` - An array of 4 bytes representing the IPv4 address.
+    /// 
+    /// This specifies the address the server will bind to. For example, `[127, 0, 0, 1]` binds
+    /// the server to localhost, while `[0, 0, 0, 0]` binds it to all available network interfaces.
+    /// 
+    /// サーバーのホストアドレスを設定します。
+    /// 
+    /// # 引数
+    /// * `host` - IPv4アドレスを表す4バイトの配列。
+    /// 
+    /// このアドレスは、サーバーがバインドするアドレスを指定します。例: `[127, 0, 0, 1]`はローカルホスト、
+    /// `[0, 0, 0, 0]`は全てのネットワークインターフェースにバインドします。
     pub fn host(mut self, host: [u8; 4]) -> Self {
         self.config.host = host;
         self
     }
 
-    /// サーバーのポートを設定する
+    /// Sets the port number for the server.
+    /// 
+    /// # Arguments
+    /// * `port` - The port number the server will listen on.
+    /// 
+    /// This determines the port where the server will accept incoming connections.
+    /// 
+    /// サーバーのポート番号を設定します。
+    /// 
+    /// # 引数
+    /// * `port` - サーバーがリッスンするポート番号。
+    /// 
+    /// このポートは、サーバーが接続を受け付けるポートを指定します。
     pub fn port(mut self, port: u16) -> Self {
         self.config.port = port;
         self
     }
 
-    /// スレッド数を設定する
+    /// Sets the number of threads for the server.
+    ///     
+    /// # Arguments
+    /// * `thread` - The number of threads to use for the server.
+    /// 
+    /// This controls the number of worker threads that will handle incoming requests.
+    /// 
+    /// サーバーのスレッド数を設定します。
+    /// 
+    /// # 引数
+    /// * `thread` - サーバーで使用するスレッド数。
+    /// 
+    /// このスレッド数は、リクエストを処理するワーカースレッドの数を指定します。
     pub fn thread(mut self, thread: usize) -> Self {
         self.config.thread = thread;
         self
     }
 
-    /// スレッド名を設定する
+    /// Sets the name of the worker threads.
+    /// 
+    /// # Arguments
+    /// * `thread_name` - The name of the worker threads.
+    /// 
+    /// スレッド名を設定します。
+    /// 
+    /// # 引数
+    /// * `thread_name` - ワーカースレッドの名前。
     pub fn thread_name(mut self, thread_name: String) -> Self {
         self.config.thread_name = thread_name;
         self
     }
 
-    /// タスクキューのサイズを設定する
+    /// Sets the size of the task queue for the worker pool.
+    /// 
+    /// # Arguments
+    /// * `queue_size` - The size of the task queue.
+    /// 
+    /// This defines how many tasks can be queued for processing before new tasks are rejected.
+    /// 
+    /// タスクキューのサイズを設定します。
+    /// 
+    /// # 引数
+    /// * `queue_size` - タスクキューのサイズ。
+    /// 
+    /// このサイズは、新しいタスクが拒否されるまでにキューできるタスク数を指定します。
     pub fn queue_size(mut self, queue_size: usize) -> Self {
         self.config.queue_size = queue_size;
         self
     }
 
-    /// サーバーを構成する
+    /// Sets the reuse address option for the server socket.
+    ///
+    /// # Arguments
+    /// * `val` - A boolean indicating whether to enable reuse address.
+    ///
+    /// This allows the server to bind to an address that is in a TIME_WAIT state, which can
+    /// be useful for quickly restarting the server.
+    ///
+    /// サーバーソケットのアドレス再利用オプションを設定します。
+    ///
+    /// # 引数
+    /// * `val` - アドレス再利用を有効にするかどうか。
+    ///
+    /// 有効にすると、TIME_WAIT状態のアドレスにもバインドでき、サーバーの素早い再起動が可能です。
+    pub fn reuse_address(mut self, val: bool) -> Self {
+        self.config.reuse_address = val;
+        self
+    }
+
+    /// Sets the nodelay option for the server socket.
+    ///
+    /// # Arguments
+    /// * `val` - A boolean indicating whether to disable Nagle's algorithm.
+    ///
+    /// Disabling Nagle's algorithm can reduce latency for small packets by sending them immediately.
+    ///
+    /// サーバーソケットのNagleアルゴリズム無効化オプションを設定します。
+    ///
+    /// # 引数
+    /// * `val` - Nagleアルゴリズムを無効にするかどうか。
+    ///
+    /// 無効化すると、小さなパケットを即時送信し、遅延を減らせます。
+    pub fn nodelay(mut self, val: bool) -> Self {
+        self.config.nodelay = val;
+        self
+    }
+
+    /// Sets the backlog size for the server socket.
+    ///
+    /// # Arguments
+    /// * `val` - The maximum number of pending connections.
+    ///
+    /// This sets the maximum number of connections that can be queued before the server starts rejecting new ones.
+    ///
+    /// サーバーソケットのバックログサイズを設定します。
+    ///
+    /// # 引数
+    /// * `val` - 保留接続の最大数。
+    ///
+    /// サーバーが新しい接続を拒否するまでにキューできる最大接続数を指定します。
+    pub fn backlog(mut self, val: usize) -> Self {
+        self.config.backlog = val;
+        self
+    }
+
+    /// Sets the size of the send buffer for the server socket.
+    ///
+    /// # Arguments
+    /// * `val` - The size of the send buffer in bytes.
+    ///
+    /// This controls the amount of data that can be buffered for sending before the socket blocks.
+    ///
+    /// サーバーソケットの送信バッファサイズを設定します。
+    ///
+    /// # 引数
+    /// * `val` - 送信バッファサイズ（バイト単位）。
+    ///
+    /// ソケットがブロックする前に送信できるデータ量を制御します。
+    pub fn send_buffer_size(mut self, val: usize) -> Self {
+        self.config.send_buffer_size = val;
+        self
+    }
+
+    /// Sets the size of the receive buffer for the server socket.
+    ///
+    /// # Arguments
+    /// * `val` - The size of the receive buffer in bytes.
+    ///
+    /// This controls the amount of data that can be buffered for receiving before the socket blocks.
+    ///
+    /// サーバーソケットの受信バッファサイズを設定します。
+    ///
+    /// # 引数
+    /// * `val` - 受信バッファサイズ（バイト単位）。
+    ///
+    /// ソケットがブロックする前に受信できるデータ量を制御します。
+    pub fn recv_buffer_size(mut self, val: usize) -> Self {
+        self.config.recv_buffer_size = val;
+        self
+    }
+
+    /// Enables or disables TCP keep-alive for the server socket.
+    ///
+    /// # Arguments
+    /// * `val` - A boolean indicating whether to enable keep-alive.
+    ///
+    /// If enabled, the server will periodically send keep-alive packets to ensure the connection is still active.
+    ///
+    /// サーバーソケットのTCP Keep-Alive有効化オプションを設定します。
+    ///
+    /// # 引数
+    /// * `val` - Keep-Aliveを有効にするかどうか。
+    ///
+    /// 有効にすると、サーバーは定期的にKeep-Aliveパケットを送信し、接続が生きているか確認します。
+    pub fn keepalive_enabled(mut self, val: bool) -> Self {
+        self.config.keepalive_enabled = val;
+        self
+    }
+
+    /// Sets the idle time before the first keep-alive packet is sent.
+    ///
+    /// # Arguments
+    /// * `val` - The duration of the idle time.
+    ///
+    /// This specifies how long the connection can remain idle before the first keep-alive packet is sent.
+    ///
+    /// 最初のKeep-Aliveパケット送信までのアイドル時間を設定します。
+    ///
+    /// # 引数
+    /// * `val` - アイドル時間のDuration。
+    ///
+    /// 接続がアイドル状態になってから最初のKeep-Aliveパケットを送信するまでの時間を指定します。
+    pub fn keepalive_time(mut self, val: Duration) -> Self {
+        self.config.keepalive_time = val;
+        self
+    }
+
+    /// Sets the interval between subsequent keep-alive packets.
+    ///
+    /// # Arguments
+    /// * `val` - The duration of the interval.
+    ///
+    /// This specifies the time between keep-alive packets after the first one is sent.
+    ///
+    /// 2回目以降のKeep-Aliveパケット送信間隔を設定します。
+    ///
+    /// # 引数
+    /// * `val` - 送信間隔のDuration。
+    ///
+    /// 最初の送信以降、Keep-Aliveパケットを送信する間隔を指定します。
+    pub fn keepalive_interval(mut self, val: Duration) -> Self {
+        self.config.keepalive_interval = val;
+        self
+    }
+
+    /// build server
+    /// new KurosabiServer instance
+    /// 
+    /// サーバーをビルドします
+    /// 新しいKurosabiServerインスタンスを作成します
     pub fn build(self) -> KurosabiServer<W> {
         let worker = Arc::new(WorkerPool::new(self.config.queue_size, self.prc_worker.clone()));
         let runtime = tokio::runtime::Builder::new_multi_thread()
@@ -88,14 +429,29 @@ impl<W: Worker + 'static> KurosabiServerBuilder<W> {
 }
 
 impl<W: Worker + 'static> KurosabiServer<W> {
-    /// サーバーを起動する
+    /// Starts the server and begins accepting connections.
+    /// 
+    /// サーバーを起動し、接続を受け付け始めます。
     pub async fn run(&mut self) {
         let addr = SocketAddr::from((self.config.host, self.config.port));
         let socket = Socket::new(Domain::IPV4, socket2::Type::STREAM, Some(Protocol::TCP)).unwrap();
-        socket.set_reuse_address(true).unwrap();
-        socket.set_nodelay(true).unwrap();
+        socket.set_reuse_address(self.config.reuse_address).unwrap();
+        socket.set_nodelay(self.config.nodelay).unwrap();
         socket.bind(&addr.into()).unwrap();
-        socket.listen(1024).unwrap();
+        socket.listen(self.config.backlog as i32).unwrap();
+        socket.set_reuse_address(self.config.reuse_address).unwrap();
+
+        socket.set_send_buffer_size(self.config.send_buffer_size).unwrap(); // 送信バッファを設定
+        socket.set_recv_buffer_size(self.config.recv_buffer_size).unwrap(); // 受信バッファを設定
+
+        if self.config.keepalive_enabled {
+            socket.set_tcp_keepalive(
+                &TcpKeepalive::new()
+                    .with_time(self.config.keepalive_time) // 最初のKeep-Alive送信までの時間
+                    .with_interval(self.config.keepalive_interval) // Keep-Aliveパケットの間隔
+            ).unwrap();
+            socket.set_keepalive(true).unwrap();
+        }
 
         let listener = tokio::net::TcpListener::from_std(socket.into()).unwrap();
         info!("Server starting on http://{}", addr);

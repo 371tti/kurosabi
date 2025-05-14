@@ -1,4 +1,6 @@
-//! 高速 Radix ルータ (AHash + SmallVec + 2-phase param)
+//! High-speed Radix router (AHash + SmallVec + 2-phase param)
+//!
+//! 高速Radixルータ（AHash + SmallVec + 2段階パラメータ）
 
 use std::{future::Future, pin::Pin, sync::Arc};
 
@@ -6,30 +8,51 @@ use ahash::AHashMap as Map;
 use smallvec::SmallVec;
 
 use crate::{
-    error::HttpError, kurosabi::Context, request::Req, utils::method::Method,
+    kurosabi::Context, request::Req, utils::method::Method,
 };
 
-/* ---------- Router trait -------------------------------------------- */
+/// Trait for a generic router implementation.
+///
+/// This trait defines the interface for registering routes, a not-found handler, building the router, and routing requests.
+///
+/// 汎用ルータ実装のためのトレイト。
+/// このトレイトは、ルート登録、NotFoundハンドラ登録、ルータ構築、リクエストのルーティングのインターフェースを定義します。
 pub trait GenRouter<F>: Send + Sync
 where
     F: Send + Sync + 'static,
 {
+    /// Register a route handler for a method and pattern.
+    ///
+    /// 指定したメソッドとパターンに対するハンドラを登録します。
     fn regist(&mut self, method: Method, pattern: &str, excuter: F);
+    /// Register a handler for not found (404) cases.
+    ///
+    /// 404（NotFound）時のハンドラを登録します。
     fn regist_not_found(&mut self, excuter: F);
+    /// Build and finalize the router structure.
+    ///
+    /// ルータ構造を構築・最適化します。
     fn build(&mut self);
+    /// Route an incoming request and return the corresponding handler if found.
+    ///
+    /// リクエストをルーティングし、該当するハンドラがあれば返します。
     fn route(&self, req: &mut Req) -> Option<F>;
 }
 
-/* ---------- Handler alias ------------------------------------------- */
+/// Boxed async handler type for routing.
+///
+/// This type represents an async handler function that takes a context and returns a future.
+///
+/// ルーティング用のBox化された非同期ハンドラ型。
+/// この型は、コンテキストを受け取り、Futureを返す非同期ハンドラ関数を表します。
 pub type BoxedHandler<C> = Box<
     dyn Fn(Context<C>)
             -> Pin<
-                Box<dyn Future<Output = Result<Context<C>, (Context<C>, HttpError)>> + Send>,
+                Box<dyn Future<Output = Context<C>> + Send>,
             > + Send
         + Sync,
 >;
 
-/* ---------- Radix tree --------------------------------------------- */
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Kind {
     Static,
@@ -64,7 +87,12 @@ impl<C> Node<C> {
     }
 }
 
-/* ---------- Router struct ------------------------------------------ */
+/// Default Radix router implementation.
+///
+/// This struct implements a high-speed Radix tree-based router for HTTP methods and paths.
+///
+/// デフォルトのRadixルータ実装。
+/// この構造体は、HTTPメソッドとパスに対して高速なRadix木ベースのルーティングを実現します。
 pub struct DefaultRouter<C> {
     trees: Map<Method, Box<Node<C>>>,
     not_found_handler: Option<Arc<BoxedHandler<C>>>,
@@ -81,12 +109,11 @@ impl<C> DefaultRouter<C> {
     }
 }
 
-/* ================= GenRouter impl ================================== */
 impl<C: 'static> GenRouter<Arc<BoxedHandler<C>>> for DefaultRouter<C> {
     fn regist_not_found(&mut self, excuter: Arc<BoxedHandler<C>>) {
         self.not_found_handler = Some(excuter);
     }
-    /* ----- regist --------------------------------------------------- */
+
     fn regist(&mut self, method: Method, pattern: &str, excuter: Arc<BoxedHandler<C>>) {
         assert!(!self.sealed, "router is sealed");
 
@@ -109,7 +136,6 @@ impl<C: 'static> GenRouter<Arc<BoxedHandler<C>>> for DefaultRouter<C> {
 
             match path.as_bytes()[0] {
                 b':' => {
-                    /* :param ---------------------------------------- */
                     let end = path.find('/').unwrap_or(path.len());
                     let name = &path[1..end];
                     path = path[end..].trim_start_matches('/');
@@ -121,14 +147,12 @@ impl<C: 'static> GenRouter<Arc<BoxedHandler<C>>> for DefaultRouter<C> {
                     node = child.as_mut();
                 }
                 b'*' => {
-                    /* * --------------------------------------------- */
                     node = node
                         .wild_child
                         .get_or_insert_with(|| Box::new(Node::new(Kind::Wildcard, "")));
                     path = "";
                 }
                 _ => {
-                    /* Static ---------------------------------------- */
                     let mut i = 0;
                     while i < path.len()
                         && !matches!(path.as_bytes()[i], b':' | b'*' | b'/')
@@ -141,7 +165,6 @@ impl<C: 'static> GenRouter<Arc<BoxedHandler<C>>> for DefaultRouter<C> {
                     let key = seg.as_bytes()[0];
                     let bucket = node.fixed.entry(key).or_default();
 
-                    // 最大共有 prefix 探索
                     let mut idx_lcp = None;
                     for (n, child) in bucket.iter_mut().enumerate() {
                         let lcp = child
@@ -154,7 +177,6 @@ impl<C: 'static> GenRouter<Arc<BoxedHandler<C>>> for DefaultRouter<C> {
                             idx_lcp = Some((n, lcp));
                             break;
                         } else if lcp > 0 {
-                            // 部分一致 → 分割
                             let suffix_existing = child.label[lcp..].to_string();
                             let mut split = Node::new(Kind::Static, suffix_existing);
                             std::mem::swap(&mut split.fixed, &mut child.fixed);
@@ -180,7 +202,6 @@ impl<C: 'static> GenRouter<Arc<BoxedHandler<C>>> for DefaultRouter<C> {
                         bucket.last_mut().unwrap()
                     };
 
-                    // ★ BUGFIX: 正しく suffix 側へ進む
                     let lcp = child.label.len();
                     if seg.len() > lcp {
                         let suffix = &seg[lcp..];
@@ -203,7 +224,6 @@ impl<C: 'static> GenRouter<Arc<BoxedHandler<C>>> for DefaultRouter<C> {
         }
     }
 
-    /* ----- build ---------------------------------------------------- */
     fn build(&mut self) {
         if self.sealed {
             return;
@@ -228,11 +248,9 @@ impl<C: 'static> GenRouter<Arc<BoxedHandler<C>>> for DefaultRouter<C> {
         self.sealed = true;
     }
 
-    /* ----- route ---------------------------------------------------- */
     #[inline]
     fn route(&self, req: &mut Req) -> Option<Arc<BoxedHandler<C>>> {
         let mut node = self.trees.get(&req.method)?.as_ref();
-        // クエリとフラグメントを除外してパスだけを取得
         let full_path = req.path.path.as_str();
         let path = full_path
             .split('?').next().unwrap_or(full_path)
@@ -243,12 +261,10 @@ impl<C: 'static> GenRouter<Arc<BoxedHandler<C>>> for DefaultRouter<C> {
         let mut i = 0;
         let mut params: SmallVec<[(&str, (usize, usize)); 4]> = SmallVec::new();
 
-        /* phase-1 : 走査 & パラメータ位置記録 ------------------------ */
         loop {
             if i == path.len() {
                 break;
             }
-            /* Static ------------------------------------------------ */
             if let Some(bucket) = node.fixed.get(&path.as_bytes()[i]) {
                 let mut matched = false;
                 for child in bucket {
@@ -264,7 +280,6 @@ impl<C: 'static> GenRouter<Arc<BoxedHandler<C>>> for DefaultRouter<C> {
                 }
                 if matched { continue; }
             }
-            /* Param ------------------------------------------------- */
             if let Some(child) = &node.param_child {
                 let start = i;
                 while i < path.len() && path.as_bytes()[i] != b'/' { i += 1; }
@@ -275,21 +290,18 @@ impl<C: 'static> GenRouter<Arc<BoxedHandler<C>>> for DefaultRouter<C> {
                 node = child;
                 continue;
             }
-            /* Wildcard ---------------------------------------------- */
             if let Some(child) = &node.wild_child {
                 params.push(("*", (i, path.len())));
                 node = child;
                 break;
             }
             
-            // 404 Not Found ------------------------------------- */
             if let Some(handler) = self.not_found_handler.as_ref() {
                 return Some(handler.clone());
             }
             return None;
         }
 
-        /* phase-2 : 可変借用してセット ------------------------------ */
         for (key, (s, e)) in params {
             req.path.set_field(key, &path[s..e]);
         }
