@@ -136,12 +136,17 @@ async fn main() {
         <p>Try the following routes:</p>
         <ul>
             <li><a href="/hello">/hello</a></li>
-            <li><a href="/hello/John">/hello/John</a></li>
+            <li><a href="/hello/kurosabi">/hello/kurosabi</a></li>
             <li><a href="/json">/json</a></li>
             <li><a href="/field/name/Kurosabi">/field/name/Kurosabi</a></li>
             <li><a href="/gurd/some/path">/gurd/some/path</a></li>
             <li><a href="/submit">/submit</a></li>
             <li><a href="/gurd/*">/gurd/*</a></li>
+            <li><a href="/file">/file</a></li>
+            <li><a href="/jsonapi">/jsonapi</a></li>
+            <li><a href="/loopA">/loopA</a></li>
+            <li><a href="/loopB">/loopB</a></li>
+            <li><a href="/notfound">/notfound</a></li>
         </ul>
         "#);
         c
