@@ -1,6 +1,5 @@
 use std::{path::PathBuf, sync::Arc};
 
-use bytes::Bytes;
 use kurosabi::{
     api::GETJsonAPI, html_format, kurosabi::Context, Kurosabi
 };
@@ -191,22 +190,23 @@ async fn main() {
     });
 
     kurosabi.get("/stream", |mut c| async move {
-        use tokio::time::{sleep, Duration};
-    
-        // ストリームを生成: 1秒ごとに "count: n\n" を送信 (n=1..=10)
+        // ストリームを生成: 1秒ごとに "count: n\n" を送信 (n=1..=100)
+        use bytes::Bytes;
+
         let stream = stream::iter(1..=10)
-            .then(|n| async move {
+            .map(|n| async move {
                 sleep(Duration::from_secs(1)).await;
-                Ok::<_, std::io::Error>(Bytes::from(format!("count: {}\n", n)))
-            });
-    
+                format!("count: {}\n", n)
+            })
+            .buffered(1) // 同時に1つのタスクを実行
+            .map(|s| Ok::<_, std::io::Error>(Bytes::from(s)));
+
         // StreamReaderでAsyncReadに変換
         let reader = StreamReader::new(stream);
-    
-        // Pin<Box<dyn AsyncRead + Send + Sync>> 型に変換
+
+        // Pin<Box<dyn AsyncRead + Send + Sync>>
         let boxed_stream: Pin<Box<dyn AsyncRead + Send + Sync>> = Box::pin(reader);
-    
-        // ストリームをレスポンスとして設定
+
         c.res.stream(boxed_stream);
         c
     });

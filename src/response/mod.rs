@@ -430,7 +430,7 @@ impl Body {
                     }
                     Body::Stream(stream) => {
                         let mut reader = tokio::io::BufReader::new(stream);
-                        let mut buffer = [0; 8];
+                        let mut buffer = [0; 8192];
                         loop {
                             let n = reader.read(&mut buffer).await.map_err(|e| KurosabiError::IoError(e))?;
                             if n == 0 {
