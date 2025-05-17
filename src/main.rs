@@ -67,7 +67,7 @@ async fn main() {
     kurosabi.get_json_api("/jsonapi", MyAPI::new());
 
     kurosabi.get("/file", |mut c| async move {
-        let _ = c.res.file(&c.req, PathBuf::from("README.md"), true).await.unwrap();
+        let _ = c.res.file(&c.req, PathBuf::from("C:/nogera0.mp4"), true).await.unwrap();
         c
     });
 
