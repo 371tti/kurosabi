@@ -268,7 +268,7 @@ async fn main() {
         .thread(8)
         .thread_name("kurosabi-worker".to_string())
         .queue_size(128)
-        .nodelay(false)
+        .nodelay(false) // 細かいストリームの実装をする場合は、nodelayをfalseにすることをおすすめします
         .build();
 
     server.run().await;
