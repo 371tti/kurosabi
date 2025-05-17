@@ -107,7 +107,7 @@ async fn main() {
     kurosabi.get("/file", |mut c| async move {
         // stream対応、 range byte対応です inline: true でブラウザで表示されます
         // inline: false でダウンロードされます
-        let _ = c.res.file(&c.req, PathBuf::from("README.md"), true).await.unwrap();
+        let _ = c.res.file(&c.req, PathBuf::from("README.md"), true, Some("README.md")).await.unwrap();
         c
     });
 
@@ -243,6 +243,7 @@ async fn main() {
             <li><a href="/loopA">/loopA</a></li>
             <li><a href="/loopB">/loopB</a></li>
             <li><a href="/notfound">/notfound</a></li>
+            <li><a href="/stream">/stream</a></li>
         </ul>
         "#);
         c

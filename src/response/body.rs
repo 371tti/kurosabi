@@ -118,6 +118,7 @@ impl Res {
         req: &Req,
         path: P,
         inline: bool,
+        file_name: Option<&str>
     ) -> Result<(), HttpError> {
         const DEFAULT_BUFFER_SIZE: usize = 16384; // デフォルトのバッファサイズ
         let path = path.as_ref();
@@ -139,7 +140,7 @@ impl Res {
         self.header.set("Content-Type", ctype);
 
         /* ---------- Content-Disposition -------------- */
-        if let Some(fname) = path.file_name().and_then(OsStr::to_str) {
+        if let Some(fname) = file_name.or(path.file_name().and_then(OsStr::to_str)) {
             self.header
                 .set("Content-Disposition", &format!("{}; filename=\"{}\"", if inline { "inline" } else { "attachment" }, fname));
         }
