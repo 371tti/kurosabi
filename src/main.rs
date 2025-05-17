@@ -4,11 +4,7 @@ use kurosabi::{
     api::GETJsonAPI, html_format, kurosabi::Context, Kurosabi
 };
 use serde::Serialize;
-use tokio::time::{sleep, Duration};
-use futures::stream::{self, StreamExt};
-use std::pin::Pin;
-use tokio::io::AsyncRead;
-use tokio_util::io::StreamReader;
+use futures::stream::{StreamExt};
 
 pub struct MyContext {
     pub name: String,
@@ -96,10 +92,7 @@ async fn main() {
     // これにより、GETリクエストが来たときにMyAPIのhandlerが呼び出されます
     kurosabi.get_json_api("/jsonapi", MyAPI::new());
 
-    // ルーティングの定義
-    // method GETで"/hello"にアクセスしたときのハンドラを定義します
-    // このハンドラは、"Hello, World!"というテキストをレスポンスとして返します
-    // また、クッキーとカスタムヘッダを設定します
+
     kurosabi.get("/hello",  |mut c| async move {
         c.res.text("Hello, World!");
         let key = "session_id";
@@ -189,25 +182,45 @@ async fn main() {
         c
     });
 
+    // streamの実装
+    // method GETで"/stream"にアクセスしたときのハンドラを定義します
+    // このハンドラは、1秒ごとに現在の時刻を送信するストリームをレスポンスとして返します
     kurosabi.get("/stream", |mut c| async move {
-        // ストリームを生成: 1秒ごとに "count: n\n" を送信 (n=1..=100)
         use bytes::Bytes;
+        use tokio::time::{sleep, Duration};
+        use futures::stream;
+        use tokio_util::io::StreamReader;
+        use std::pin::Pin;
+        use tokio::io::AsyncRead;
 
-        let stream = stream::iter(1..=10)
+        // Set Transfer-Encoding to "chunked"
+        c.res.header.set("Transfer-Encoding", "chunked");
+
+        // ストリームを生成: 1秒ごとに "count: n\n" を送信 (n=1..=10)
+        let stream = stream::iter(1..=1000)
             .map(|n| async move {
-                sleep(Duration::from_secs(1)).await;
-                format!("count: {}\n", n)
+            sleep(Duration::from_secs(1)).await;
+            let now = std::time::SystemTime::now();
+            let data = format!("current time (iteration {}): {:?}\n", n, now);
+            let chunk_size = data.len();
+            println!("Sending chunk: {}", data);
+            format!("{:X}\r\n{}\r\n", chunk_size, data)
             })
-            .buffered(1) // 同時に1つのタスクを実行
-            .map(|s| Ok::<_, std::io::Error>(Bytes::from(s)));
+            .buffered(1)
+            .map(|s| Ok::<_, std::io::Error>(Bytes::from(s)))
+            .chain(stream::once(async {
+                Ok::<_, std::io::Error>(Bytes::from("0\r\n\r\n"))
+            }));
 
         // StreamReaderでAsyncReadに変換
         let reader = StreamReader::new(stream);
+        println!("StreamReader created");
 
         // Pin<Box<dyn AsyncRead + Send + Sync>>
         let boxed_stream: Pin<Box<dyn AsyncRead + Send + Sync>> = Box::pin(reader);
 
-        c.res.stream(boxed_stream);
+        c.res.stream(boxed_stream, 8192);
+        println!("StreamReader created");
         c
     });
 
@@ -255,6 +268,7 @@ async fn main() {
         .thread(8)
         .thread_name("kurosabi-worker".to_string())
         .queue_size(128)
+        .nodelay(false)
         .build();
 
     server.run().await;
