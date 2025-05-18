@@ -3,7 +3,7 @@ pub mod worker;
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 use socket2::{Domain, Protocol, Socket, TcpKeepalive};
-use tokio::{self, io::AsyncWriteExt};
+use tokio::{self, io::AsyncWriteExt, net::TcpListener};
 use log::info;
 use worker::{Worker, WorkerPool};
 
@@ -444,29 +444,6 @@ impl<W: Worker + 'static> KurosabiServer<W> {
     /// サーバーを起動し、接続を受け付け始めます。
     pub fn run(&mut self) {
         self.runtime.block_on(async {
-            let addr = SocketAddr::from((self.config.host, self.config.port));
-            let socket = Socket::new(Domain::IPV4, socket2::Type::STREAM, Some(Protocol::TCP)).unwrap();
-            socket.set_reuse_address(self.config.reuse_address).unwrap();
-            socket.set_nodelay(self.config.nodelay).unwrap();
-            socket.bind(&addr.into()).unwrap();
-            socket.listen(self.config.backlog as i32).unwrap();
-            socket.set_reuse_address(self.config.reuse_address).unwrap();
-
-            socket.set_send_buffer_size(self.config.send_buffer_size).unwrap(); // 送信バッファを設定
-            socket.set_recv_buffer_size(self.config.recv_buffer_size).unwrap(); // 受信バッファを設定
-
-            if self.config.keepalive_enabled {
-                socket.set_tcp_keepalive(
-                    &TcpKeepalive::new()
-                        .with_time(self.config.keepalive_time) // 最初のKeep-Alive送信までの時間
-                        .with_interval(self.config.keepalive_interval) // Keep-Aliveパケットの間隔
-                ).unwrap();
-                socket.set_keepalive(true).unwrap();
-            }
-
-            let listener = tokio::net::TcpListener::from_std(socket.into()).unwrap();
-            info!("Server starting on http://{}", addr);
-
             // ワーカースレッドを起動する
             for i in 0..self.config.thread {
                 let worker = self.worker.clone();
@@ -476,12 +453,11 @@ impl<W: Worker + 'static> KurosabiServer<W> {
                 info!("{}.{} running !", self.config.thread_name, i);
             }
             // 接続をマルチスレッドで受け付ける
-            let listener = Arc::new(listener);
-            let worker_pool = self.worker.clone();
             let accept_threads = self.config.accept_threads.unwrap_or(self.config.thread / 2);
             for _ in 0..accept_threads {
-                let listener = listener.clone();
-                let worker_pool = worker_pool.clone();
+                // ソケットの設定を関数にまとめて呼び出す
+                let listener = self.create_configured_listener().await;
+                let worker_pool = self.worker.clone();
                 tokio::spawn(async move {
                     loop {
                         match listener.accept().await {
@@ -497,9 +473,42 @@ impl<W: Worker + 'static> KurosabiServer<W> {
                     }
                 });
             }
+            info!(
+                "Server starting on http://{}.{}.{}.{}:{}",
+                self.config.host[0],
+                self.config.host[1],
+                self.config.host[2],
+                self.config.host[3],
+                self.config.port
+            );
             // Prevent the function from returning immediately
             futures::future::pending::<()>().await;
         });
+    }
+
+    async fn create_configured_listener(&self) -> TcpListener {
+        let addr = SocketAddr::from((self.config.host, self.config.port));
+        let socket = Socket::new(Domain::IPV4, socket2::Type::STREAM, Some(Protocol::TCP)).unwrap();
+        socket.set_reuse_address(self.config.reuse_address).unwrap();
+        socket.set_nodelay(self.config.nodelay).unwrap();
+        socket.bind(&addr.into()).unwrap();
+        socket.listen(self.config.backlog as i32).unwrap();
+        socket.set_reuse_address(self.config.reuse_address).unwrap();
+
+        socket.set_send_buffer_size(self.config.send_buffer_size).unwrap(); // 送信バッファを設定
+        socket.set_recv_buffer_size(self.config.recv_buffer_size).unwrap(); // 受信バッファを設定
+
+        if self.config.keepalive_enabled {
+            socket.set_tcp_keepalive(
+                &TcpKeepalive::new()
+                    .with_time(self.config.keepalive_time) // 最初のKeep-Alive送信までの時間
+                    .with_interval(self.config.keepalive_interval) // Keep-Aliveパケットの間隔
+            ).unwrap();
+            socket.set_keepalive(true).unwrap();
+        }
+
+        let listener = tokio::net::TcpListener::from_std(socket.into()).unwrap();
+        listener
     }
 }
 
