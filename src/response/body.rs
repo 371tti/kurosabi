@@ -258,7 +258,6 @@ impl Body {
                         let size: usize = self.size();
                         let pow_2_size = size.checked_mul(size).unwrap_or(usize::MAX).max(1);
                         let level = (pow_2_size / 102400000).min(11);
-                        println!("pow_2_size: {}, level: {}", pow_2_size, level);
                         if level == 0 {
                             return;
                         }
