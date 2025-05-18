@@ -215,7 +215,7 @@ where
     /// ルーターをビルドしてサーバーを生成する
     pub fn server(mut self) -> KurosabiServerBuilder<DefaultWorker<C, R>> {
         self.router.build();
-        let worker = std::sync::Arc::new(DefaultWorker::new(std::sync::Arc::new(self.router), std::sync::Arc::new(self.context)));
+        let worker = Arc::new(DefaultWorker::new(Arc::new(self.router), Arc::new(self.context)));
         KurosabiServerBuilder::new(worker)
     }
 }

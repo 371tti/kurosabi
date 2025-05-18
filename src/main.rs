@@ -75,8 +75,7 @@ impl GETJsonAPI<Context<Arc<MyContext>>, ResJsonSchema> for MyAPI {
     }
 }
 
-#[tokio::main]
-async fn main() {
+fn main() {
     // ログの初期化
     env_logger::builder().filter_level(log::LevelFilter::Debug).init();
 
@@ -265,13 +264,13 @@ async fn main() {
 
     let mut server = kurosabi.server()
         .host([0, 0, 0, 0])
-        .port(85)
+        .port(8080)
         .thread(8)
         .thread_name("kurosabi-worker".to_string())
         .queue_size(128)
         .nodelay(false) // 細かいストリームの実装をする場合は、nodelayをfalseにすることをおすすめします
         .build();
 
-    server.run().await;
+    server.run();
 }
 
