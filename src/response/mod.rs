@@ -1,4 +1,4 @@
-use body::{Body, Compression};
+use body::{Body, Compression, CompressionConfig};
 
 
 
@@ -17,6 +17,7 @@ pub struct Res {
     /// ボディ
     pub body: Body,
     pub compress_enabled: bool,
+    pub compress_config: CompressionConfig,
 }
 
 impl Res {
@@ -35,6 +36,7 @@ impl Res {
             header: Header::new(),
             body: Body::Empty,
             compress_enabled: true,
+            compress_config: CompressionConfig::Optimal,
         }
     }
 
@@ -46,8 +48,31 @@ impl Res {
         
         // Accept-Encoding ヘッダを取得
         if let Some(encoding_list) = req.header.get_accept_encoding_vec() {
-            if encoding_list.contains(&"br") {
-                return Compression::BrOptimal;
+            match self.compress_config {
+                CompressionConfig::Optimal => {
+                    if encoding_list.contains(&"br") {
+                        return Compression::BrOptimal;
+                    }
+                },
+                CompressionConfig::Mid => {
+                    if encoding_list.contains(&"br") {
+                        return Compression::BrMid;
+                    }
+                },
+                CompressionConfig::Low => {
+                    if encoding_list.contains(&"br") {
+                        return Compression::BrLow;
+                    }
+                },
+                CompressionConfig::Hi => {
+                    if encoding_list.contains(&"br") {
+                        return Compression::BrHi;
+                    }
+                },
+                CompressionConfig::None => {
+                    return Compression::NotCompressed;
+                },
+
             }
         }
         return Compression::NotCompressed;

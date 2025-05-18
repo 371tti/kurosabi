@@ -107,7 +107,7 @@ async fn main() {
     kurosabi.get("/file", |mut c| async move {
         // stream対応、 range byte対応です inline: true でブラウザで表示されます
         // inline: false でダウンロードされます
-        let _ = c.res.file(&c.req, PathBuf::from("README.md"), true, Some("README.md")).await.unwrap();
+        let _ = c.res.file(&c.req, PathBuf::from("C:/nogera0.mp4"), true, Some("no.mp4")).await.unwrap();
         c
     });
 
@@ -265,7 +265,7 @@ async fn main() {
 
     let mut server = kurosabi.server()
         .host([0, 0, 0, 0])
-        .port(8080)
+        .port(85)
         .thread(8)
         .thread_name("kurosabi-worker".to_string())
         .queue_size(128)

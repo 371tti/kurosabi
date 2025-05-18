@@ -209,6 +209,14 @@ pub enum Body {
     Stream(Pin<Box<dyn AsyncRead + Send + Sync>>, usize),
 }
 
+pub enum CompressionConfig {
+    None,
+    Optimal,
+    Mid,
+    Low,
+    Hi,
+}
+
 pub enum Compression {
     NotCompressed,
     BrOptimal,

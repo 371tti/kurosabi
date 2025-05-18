@@ -7,11 +7,13 @@ where
     Rss: Serialize,
 {
     fn new() -> Self;
+
     async fn handler(
         self,
         c: &mut C,
         req_json: Result<Rqs, serde_json::Error>,
     ) -> Rss;
+
     fn osa() -> Option<String> {
         None
     }
@@ -68,10 +70,12 @@ where
     Rss: Serialize,
 {
     fn new() -> Self;
+
     async fn handler(
         self,
         c: &mut C,
     ) -> Rss;
+    
     fn osa() -> Option<String> {
         None
     }

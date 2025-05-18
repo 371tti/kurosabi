@@ -7,6 +7,7 @@ pub mod utils;
 pub mod server;
 pub mod error;
 pub mod api;
+// pub mod middleware;
 
 pub use crate::kurosabi::Kurosabi as Kurosabi;
 pub use html_format::html_format as html_format;
