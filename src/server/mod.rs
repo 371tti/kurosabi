@@ -137,6 +137,8 @@ pub struct KurosabiConfig {
     ///
     /// 最初の送信以降、Keep-Aliveパケットを送信する間隔を指定します。
     keepalive_interval: Duration,
+    /// 接続受け入れスレッド数。未設定時はワーカースレッド数の半分を使用。
+    accept_threads: Option<usize>,
 }
 
 impl<W: Worker + 'static> KurosabiServerBuilder<W> {
@@ -170,6 +172,7 @@ impl<W: Worker + 'static> KurosabiServerBuilder<W> {
                 keepalive_enabled: true,
                 keepalive_time: Duration::from_secs(30),
                 keepalive_interval: Duration::from_secs(10),
+                accept_threads: None,
             },
             prc_worker: worker,
         }
@@ -408,6 +411,13 @@ impl<W: Worker + 'static> KurosabiServerBuilder<W> {
         self
     }
 
+    /// Sets the number of accept threads.
+    /// 未設定時はワーカースレッド数の半分を使用します。
+    pub fn accept_threads(mut self, count: usize) -> Self {
+        self.config.accept_threads = Some(count);
+        self
+    }
+
     /// build server
     /// new KurosabiServer instance
     /// 
@@ -465,11 +475,20 @@ impl<W: Worker + 'static> KurosabiServer<W> {
             info!("{}.{} running !", self.config.thread_name, i);
         }
 
-        loop {
-            let (socket, _) = listener.accept().await.unwrap();
-            socket.set_nodelay(true).unwrap();
-            let connection = TcpConnection::new(socket);
-            self.worker.assign_connection(connection).await;
+        // マルチスレッドで接続を受け入れる
+        let listener = Arc::new(listener);
+        let accept_threads = self.config.accept_threads.unwrap_or(self.config.thread / 2);
+        for _ in 0..accept_threads {
+            let listener = listener.clone();
+            let worker = self.worker.clone();
+            self.runtime.handle().spawn(async move {
+            loop {
+                let (socket, _) = listener.accept().await.unwrap();
+                socket.set_nodelay(true).unwrap();
+                let connection = TcpConnection::new(socket);
+                worker.assign_connection(connection).await;
+            }
+            });
         }
     }
 }

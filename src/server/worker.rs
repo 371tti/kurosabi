@@ -42,11 +42,14 @@ impl<W: Worker> WorkerPool<W> {
     }
 
     #[inline]
-    pub async fn assign_connection(&self, connection: TcpConnection) {
+    pub async fn assign_connection(&self, connection: TcpConnection) -> bool {
         if self.task_queue.push(connection).is_ok() {
+            // 通知してワーカーを起こす
             self.notifier.notify_one();
+            true
         } else {
             error!("Failed to assign connection to worker - queue is full");
+            false
         }
     }
 
