@@ -11,3 +11,4 @@ pub mod api;
 
 pub use crate::kurosabi::Kurosabi as Kurosabi;
 pub use html_format::html_format as html_format;
+pub use tokio::main as tokio_main;
