@@ -453,7 +453,7 @@ impl<W: Worker + 'static> KurosabiServer<W> {
                 info!("{}.{} running !", self.config.thread_name, i);
             }
             // 接続をマルチスレッドで受け付ける
-            let accept_threads = self.config.accept_threads.unwrap_or(self.config.thread / 2);
+            let accept_threads = self.config.accept_threads.unwrap_or(1);
             for _ in 0..accept_threads {
                 // ソケットの設定を関数にまとめて呼び出す
                 let listener = self.create_configured_listener().await;
