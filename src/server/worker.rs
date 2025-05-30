@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{atomic::AtomicU64, Arc};
 
 use crossbeam_queue::ArrayQueue;
 use log::{debug, error};
@@ -62,5 +62,5 @@ pub trait Worker: Send + Sync {
     /// ワーカーにグローバルキューを渡す
     async fn set_global_queue(&self, queue: Arc<ArrayQueue<TcpConnection>>);
     // 今
-    async fn must_pull_me(&self) -> bool;
+    async fn set_workers_load_info(&mut self, load_info: Arc<[AtomicU64]>);
 }
