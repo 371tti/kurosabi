@@ -61,6 +61,6 @@ impl<W: Worker> WorkerPool<W> {
 pub trait Worker: Send + Sync {
     /// ワーカーにグローバルキューを渡す
     async fn set_global_queue(&self, queue: Arc<ArrayQueue<TcpConnection>>);
-    // 今
+    // 各ワーカーの負荷情報を共有する
     async fn set_workers_load_info(&mut self, load_info: Arc<[AtomicU64]>);
 }
