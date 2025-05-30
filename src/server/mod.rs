@@ -3,20 +3,24 @@ pub mod kurosabi;
 
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 
+use futures::executor;
 use socket2::{Domain, Protocol, Socket, TcpKeepalive};
 use tokio::{self, io::AsyncWriteExt, net::TcpListener};
 use log::info;
-use worker::{Worker, WorkerPool};
+use worker::{Worker};
 
-pub struct KurosabiServer<W> {
+use crate::server::{kurosabi::DefaultWorker, worker::Executor};
+
+pub struct KurosabiServer<E> 
+where E: Executor + Send + Sync + 'static {
     config: KurosabiConfig,
-    worker: Arc<WorkerPool<W>>,
+    workers: Vec<DefaultWorker<E>>,
     runtime: tokio::runtime::Runtime,
 }
 
-pub struct KurosabiServerBuilder<W> {
+pub struct KurosabiServerBuilder<E> {
     config: KurosabiConfig,
-    prc_worker: Arc<W>,
+    prc_executor: Arc<E>,
 }
 
 /// Configuration for the Kurosabi server.
@@ -142,7 +146,7 @@ pub struct KurosabiConfig {
     accept_threads: Option<usize>,
 }
 
-impl<W: Worker + 'static> KurosabiServerBuilder<W> {
+impl<E> KurosabiServerBuilder<E> {
     /// Creates a new `KurosabiServerBuilder` with default configuration.
     ///
     /// # Arguments
@@ -157,7 +161,7 @@ impl<W: Worker + 'static> KurosabiServerBuilder<W> {
     /// * `worker` - ワーカー実装を格納した`Arc`。
     ///
     /// このメソッドは、ビルダーメソッドでカスタマイズ可能なデフォルト設定で初期化します。
-    pub fn new(worker: Arc<W>) -> KurosabiServerBuilder<W> {
+    pub fn new(executor: E) -> KurosabiServerBuilder<E> {
         KurosabiServerBuilder {
             config: KurosabiConfig {
                 host: [127, 0, 0, 1],
@@ -175,7 +179,7 @@ impl<W: Worker + 'static> KurosabiServerBuilder<W> {
                 keepalive_interval: Duration::from_secs(10),
                 accept_threads: None,
             },
-            prc_worker: worker,
+            prc_executor: Arc::new(executor),
         }
     }
 
@@ -433,47 +437,26 @@ impl<W: Worker + 'static> KurosabiServerBuilder<W> {
             .unwrap();
         KurosabiServer {
             config: self.config.clone(),
-            worker,
+            executor: self.prc_executor,
             runtime,
         }
     }
 }
 
-impl<W: Worker + 'static> KurosabiServer<W> {
+impl<E> KurosabiServer<E> {
     /// Starts the server and begins accepting connections.
     /// 
     /// サーバーを起動し、接続を受け付け始めます。
     pub fn run(&mut self) {
-        self.runtime.block_on(async {
-            // ワーカースレッドを起動する
             for i in 0..self.config.thread {
-                let worker = self.worker.clone();
-                tokio::spawn(async move {
-                    worker.main_loop().await;
-                });
-                info!("{}.{} running !", self.config.thread_name, i);
+                let runtime = self.runtime.clone();
+                self.
             }
             // 接続をマルチスレッドで受け付ける
             let accept_threads = self.config.accept_threads.unwrap_or(1);
             for _ in 0..accept_threads {
                 // ソケットの設定を関数にまとめて呼び出す
                 let listener = self.create_configured_listener().await;
-                let worker_pool = self.worker.clone();
-                tokio::spawn(async move {
-                    loop {
-                        match listener.accept().await {
-                            Ok((socket, _)) => {
-                                socket.set_nodelay(true).unwrap();
-                                let connection = TcpConnection::new(socket);
-                                worker_pool.assign_connection(connection).await;
-                            }
-                            Err(e) => {
-                                eprintln!("Failed to accept connection: {}", e);
-                            }
-                        }
-                    }
-                });
-            }
             info!(
                 "Server starting on http://{}.{}.{}.{}:{}",
                 self.config.host[0],
@@ -482,9 +465,6 @@ impl<W: Worker + 'static> KurosabiServer<W> {
                 self.config.host[3],
                 self.config.port
             );
-            // Prevent the function from returning immediately
-            futures::future::pending::<()>().await;
-        });
     }
 
     async fn create_configured_listener(&self) -> TcpListener {
