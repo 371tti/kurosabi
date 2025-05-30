@@ -216,7 +216,7 @@ where
     /// ルーターをビルドしてサーバーを生成する
     pub fn server(mut self) -> KurosabiServerBuilder<DefaultWorker<C, R>> {
         self.router.build();
-        let worker = Arc::new(DefaultWorker::new(Arc::new(self.router), Arc::new(self.context)));
+        let worker = DefaultWorker::new(Arc::new(self.router), Arc::new(self.context));
         KurosabiServerBuilder::new(worker)
     }
 }

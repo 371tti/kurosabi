@@ -1,21 +1,26 @@
 pub mod worker;
 pub mod kurosabi;
 
-use std::{net::SocketAddr, sync::Arc, time::Duration};
+use std::{net::SocketAddr, ops::Deref, sync::{atomic::AtomicU64, Arc}, time::Duration};
 
+use crossbeam_queue::ArrayQueue;
 use futures::executor;
 use socket2::{Domain, Protocol, Socket, TcpKeepalive};
 use tokio::{self, io::AsyncWriteExt, net::TcpListener};
-use log::info;
+use log::{error, info};
 use worker::{Worker};
+use std::sync::atomic::Ordering::Relaxed;
 
 use crate::server::{kurosabi::DefaultWorker, worker::Executor};
 
 pub struct KurosabiServer<E> 
 where E: Executor + Send + Sync + 'static {
     config: KurosabiConfig,
+    global_queue: Arc<ArrayQueue<TcpConnection>>,
+    workers_load: Arc<Box<[AtomicU64]>>,
+    proc_executor: Arc<E>,
     workers: Vec<DefaultWorker<E>>,
-    runtime: tokio::runtime::Runtime,
+    _marker: std::marker::PhantomData<E>, // Added PhantomData to use E
 }
 
 pub struct KurosabiServerBuilder<E> {
@@ -146,7 +151,8 @@ pub struct KurosabiConfig {
     accept_threads: Option<usize>,
 }
 
-impl<E> KurosabiServerBuilder<E> {
+impl<E> KurosabiServerBuilder<E>
+where E: Executor + Send + Sync + 'static {
     /// Creates a new `KurosabiServerBuilder` with default configuration.
     ///
     /// # Arguments
@@ -171,7 +177,7 @@ impl<E> KurosabiServerBuilder<E> {
                 queue_size: 128,
                 reuse_address: true,
                 nodelay: true,
-                backlog: 1024,
+                backlog: 2048,
                 send_buffer_size: 64 * 1024,
                 recv_buffer_size: 64 * 1024,
                 keepalive_enabled: true,
@@ -428,52 +434,105 @@ impl<E> KurosabiServerBuilder<E> {
     /// 
     /// サーバーをビルドします
     /// 新しいKurosabiServerインスタンスを作成します
-    pub fn build(self) -> KurosabiServer<W> {
-        let worker = Arc::new(WorkerPool::new(self.config.queue_size, self.prc_worker.clone()));
-        let runtime = tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(self.config.thread)
-            .enable_all()
-            .build()
-            .unwrap();
+    pub fn build(self) -> KurosabiServer<E> {
+        let thread_mum = self.config.thread;
+        let queue_size = self.config.queue_size;
+        let executor = Arc::clone(&self.prc_executor);
+        // Create a new KurosabiServer instance with the provided configuration
         KurosabiServer {
-            config: self.config.clone(),
-            executor: self.prc_executor,
-            runtime,
+            config: self.config,
+            global_queue: Arc::new(ArrayQueue::new(queue_size)),
+            workers_load: Arc::new(
+                (0..thread_mum)
+                    .map(|_| AtomicU64::new(0))
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice()),
+            workers: Vec::with_capacity(thread_mum),
+            proc_executor: executor,
+            _marker: std::marker::PhantomData, // Use PhantomData to indicate that E is used
         }
     }
 }
 
-impl<E> KurosabiServer<E> {
+impl<E> KurosabiServer<E> 
+where E: Executor + Send + Sync + 'static {
     /// Starts the server and begins accepting connections.
     /// 
     /// サーバーを起動し、接続を受け付け始めます。
     pub fn run(&mut self) {
-            for i in 0..self.config.thread {
-                let runtime = self.runtime.clone();
-                self.
-            }
-            // 接続をマルチスレッドで受け付ける
-            let accept_threads = self.config.accept_threads.unwrap_or(1);
-            for _ in 0..accept_threads {
-                // ソケットの設定を関数にまとめて呼び出す
-                let listener = self.create_configured_listener().await;
-            info!(
-                "Server starting on http://{}.{}.{}.{}:{}",
-                self.config.host[0],
-                self.config.host[1],
-                self.config.host[2],
-                self.config.host[3],
-                self.config.port
+        let workers_load = Arc::clone(&self.workers_load); // Arcをクローン
+        let proc_executor = Arc::clone(&self.proc_executor); // Arcをクローン
+    
+        for worker_id in 0..self.config.thread {
+            let worker = DefaultWorker::new(
+                tokio::runtime::Builder::new_multi_thread()
+                    .worker_threads(1)
+                    .thread_name(self.config.thread_name.clone())
+                    .enable_all()
+                    .build()
+                    .expect("Failed to create Tokio runtime"),
+                Arc::clone(&proc_executor), // クローンしたArcを渡す
+                Arc::clone(&self.global_queue),
+                workers_load.clone(), // クローンしたArcを渡す
+                worker_id as u32, // worker_id
             );
+            worker.run();
+            self.workers.push(worker);
+            info!("Worker {} started", worker_id);
+        }
+
+        let accept_runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(self.config.accept_threads.unwrap_or(self.config.accept_threads.unwrap_or(1)))
+            .thread_name("kurosabi-accept".to_string())
+            .enable_all()
+            .build()
+            .expect("Failed to create accept runtime");
+
+        info!(
+            "Server starting on http://{}.{}.{}.{}:{}",
+            self.config.host[0],
+            self.config.host[1],
+            self.config.host[2],
+            self.config.host[3],
+            self.config.port
+        );
+
+        accept_runtime.block_on(async move {
+            let listener = self.create_configured_listener();
+            loop {
+                match listener.accept().await {
+                    Ok((socket, addr)) => {
+                        info!("Accepted connection from {}", addr);
+                        let connection = TcpConnection::new(socket);
+                        let first_idle_worker = self.workers_load.iter().enumerate().find_map(|(worker_id, load)| {
+                            if load.load(Relaxed) == 0 {
+                                Some(worker_id)
+                            } else {
+                                None
+                            }
+                        });
+
+                        if let Some(worker_id) = first_idle_worker {
+                            self.workers[worker_id].execute(connection);
+                        } else {
+                            self.global_queue.push(connection);
+                        }
+      
+                    }
+                    Err(e) => {
+                        error!("Failed to accept connection: {}", e);
+                    }
+                }
+            }
+        });
     }
 
-    async fn create_configured_listener(&self) -> TcpListener {
+    fn create_configured_listener(&self) -> TcpListener {
         let addr = SocketAddr::from((self.config.host, self.config.port));
         let socket = Socket::new(Domain::IPV4, socket2::Type::STREAM, Some(Protocol::TCP)).unwrap();
         socket.set_reuse_address(self.config.reuse_address).unwrap();
         socket.set_nodelay(self.config.nodelay).unwrap();
         socket.bind(&addr.into()).unwrap();
-        socket.listen(self.config.backlog as i32).unwrap();
         socket.set_reuse_address(self.config.reuse_address).unwrap();
 
         socket.set_send_buffer_size(self.config.send_buffer_size).unwrap(); // 送信バッファを設定
@@ -487,7 +546,7 @@ impl<E> KurosabiServer<E> {
             ).unwrap();
             socket.set_keepalive(true).unwrap();
         }
-
+        socket.listen(self.config.backlog as i32).unwrap();
         let listener = tokio::net::TcpListener::from_std(socket.into()).unwrap();
         listener
     }

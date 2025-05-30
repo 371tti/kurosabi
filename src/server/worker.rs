@@ -59,7 +59,7 @@ use super::TcpConnection;
 // }
 pub trait Worker<E>: Send + Sync 
 where E: Executor {
-    fn new(runtime: Runtime, executor: Arc<E>, grobal_queue: Arc<ArrayQueue<TcpConnection>>, workers_load: &'static [AtomicU64], my_worker_id: u32) -> Self;
+    fn new(runtime: Runtime, executor: Arc<E>, grobal_queue: Arc<ArrayQueue<TcpConnection>>, workers_load: Arc<Box<[AtomicU64]>>, my_worker_id: u32) -> Self;
     fn execute(&self, connection: TcpConnection);
     fn run(&self);
 }

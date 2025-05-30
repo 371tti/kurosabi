@@ -77,7 +77,7 @@ impl GETJsonAPI<Context<Arc<MyContext>>, ResJsonSchema> for MyAPI {
 
 fn main() {
     // ログの初期化
-    env_logger::builder().filter_level(log::LevelFilter::Debug).init();
+
 
     // Arc<Context>を作成します
     // Arcはスレッドセーフな参照カウント型で、複数のスレッドで共有できます
@@ -94,10 +94,6 @@ fn main() {
 
     kurosabi.get("/hello",  |mut c| async move {
         c.res.text("Hello, World!");
-        let key = "session_id";
-        let value = "123456";
-        c.res.header.set_cookie(key, value);
-        c.res.header.set("X-Custom-Header", "MyValue");
         c
     });
 
@@ -264,11 +260,12 @@ fn main() {
 
     let mut server = kurosabi.server()
         .host([0, 0, 0, 0])
-        .port(8080)
-        .thread(8)
+        .port(8082)
+        .thread(16)
         .thread_name("kurosabi-worker".to_string())
-        .queue_size(128)
-        .nodelay(false) // 細かいストリームの実装をする場合は、nodelayをfalseにすることをおすすめします
+        .queue_size(1024 * 1024) // タスクキューのサイズを設定します
+        .nodelay(true) // 細かいストリームの実装をする場合は、nodelayをfalseにすることをおすすめします
+        .accept_threads(16)
         .build();
 
     server.run();
