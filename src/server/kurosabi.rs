@@ -47,7 +47,7 @@ where E: Executor + Send + Sync + 'static {
         let worker_num = self.workers_load.len() as u64;
         let workers_load = self.workers_load;
         let grobal_queue = Arc::clone(&self.grobal_queue);
-        let my_load = self.workers_load[self.worker_id as usize].load(Relaxed);
+        let worker_id = self.worker_id;
         let executor = Arc::clone(&self.executor);
         self.runtime.spawn(async move {
             loop {
@@ -56,6 +56,8 @@ where E: Executor + Send + Sync + 'static {
                     tokio::task::yield_now().await;
                     continue;
                 }
+
+                let my_load = workers_load[worker_id as usize].load(Relaxed);
     
                 // 自分の負荷が他のワーカーの合計負荷を超えている場合は、スリープする
                 let mut load_sum = 1;
