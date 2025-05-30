@@ -7,9 +7,7 @@ use tokio::sync::Notify;
 use super::TcpConnection;
 
 pub struct WorkerPool<W> {
-    task_queue: Arc<ArrayQueue<TcpConnection>>, // ロックフリーのタスクキュー
-    pub notifier: Arc<Notify>, // ワーカーを起こすための通知
-    pub worker: Arc<W>,
+    workers: Arc<W>
 }
 
 impl<W: Worker> WorkerPool<W> {
@@ -61,7 +59,8 @@ impl<W: Worker> WorkerPool<W> {
 
 #[async_trait::async_trait]
 pub trait Worker: Send + Sync {
-    /// ワーカーのメイン処理
-    /// コネクションを受け取り、処理を行う
-    async fn execute(&self, connection: TcpConnection);
+    /// ワーカーにグローバルキューを渡す
+    async fn set_global_queue(&self, queue: Arc<ArrayQueue<TcpConnection>>);
+    // 今
+    async fn must_pull_me(&self) -> bool;
 }
