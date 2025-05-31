@@ -1,10 +1,9 @@
 pub mod worker;
 pub mod kurosabi;
 
-use std::{net::SocketAddr, ops::Deref, sync::{atomic::AtomicU64, Arc}, time::Duration};
+use std::{net::SocketAddr, sync::{atomic::AtomicU64, Arc}, time::Duration};
 
 use crossbeam_queue::ArrayQueue;
-use futures::executor;
 use socket2::{Domain, Protocol, Socket, TcpKeepalive};
 use tokio::{self, io::AsyncWriteExt, net::TcpListener};
 use log::{error, info};

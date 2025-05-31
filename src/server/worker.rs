@@ -1,9 +1,7 @@
 use std::sync::{atomic::AtomicU64, Arc};
 
 use crossbeam_queue::ArrayQueue;
-use futures::executor;
-use log::{debug, error};
-use tokio::{runtime::Runtime, sync::Notify};
+use tokio::runtime::Runtime;
 
 use super::TcpConnection;
 

@@ -1,11 +1,10 @@
-use std::{collections::VecDeque, sync::{atomic::AtomicU64, Arc}};
+use std::sync::{atomic::AtomicU64, Arc};
 
 use crossbeam_queue::ArrayQueue;
-use futures::executor;
 use log::warn;
 use tokio::{runtime::Runtime, sync::Notify};
 
-use crate::server::worker::{self, Executor, Worker};
+use crate::server::worker::{Executor, Worker};
 
 use super::TcpConnection;
 

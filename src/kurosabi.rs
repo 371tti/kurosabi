@@ -4,7 +4,7 @@ use log::{debug, error, info, warn};
 use crate::api::{GETJsonAPI, POSTJsonAPI};
 use crate::error::HttpError;
 use crate::server::worker::Executor;
-use crate::{context::DefaultContext, request::Req, response::Res, router::{BoxedHandler, DefaultRouter, GenRouter}, server::{worker::Worker, KurosabiServerBuilder, TcpConnection}};
+use crate::{context::DefaultContext, request::Req, response::Res, router::{BoxedHandler, DefaultRouter, GenRouter}, server::{KurosabiServerBuilder, TcpConnection}};
 use crate::utils::method::Method;
 pub struct Kurosabi<C, R>
 where
