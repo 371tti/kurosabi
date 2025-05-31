@@ -515,7 +515,10 @@ where E: Executor + Send + Sync + 'static {
                         if let Some(worker_id) = first_idle_worker {
                             self.workers[worker_id].execute(connection);
                         } else {
-                            self.global_queue.push(connection);
+                            self.global_queue.push(connection).unwrap_or_else(|_| {
+                                error!("Failed to push connection to global queue - queue is full");
+                                println!("Failed to push connection to global queue - queue is full");
+                            });
                         }
       
                     }
