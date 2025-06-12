@@ -1,8 +1,32 @@
-# 🔥kurosabi🔥
+<div align="center">
+<h1 style="font-size: 50px">🔥kurosabi🔥</h1>
+</div>
 
-kurosabiは、Rustの安全性と並列性を活かした、超軽量・高速・シンプルなWebフレームワークです。TypeScript製フレームワーク「hono」にインスパイアされ、Rustで快適なWeb開発体験を提供します。
+kurosabiは、Rustの安全性と並列性を活かした、超軽量・高速・シンプルなWebバックエンドルーターです。
 
----
+パフォーマンスと軽量さ、書きやすさ を大事にします
+
+## ToDo
+- 初期実装
+  - [x] http_serverの実装
+  - [x] ルーターの実装
+  - [x] 基本的な構文の実装
+- 機能追加 1
+  - [x] keep_alive の実装
+  - [x] サーバー設定の追加
+  - [x] レスポンス関連の機能追加
+- 最適化 1
+  - [x] keep_aliveを修正
+  - [x] htmlのフォーマットマクロを追加
+  - [x] TCPストリームを直接操作できるように改良
+- 破壊的変更 1
+  - [x] 構文をより扱いやすくするため Contextにすべて集約
+  - [x] http_serverをよりスールプットの高いように改良
+- 最適化 2
+  - [ ] linuxでTCP操作でport関連の改良
+  - [ ] エラーハンドリングをもっと楽に
+  - [ ] ミドルウェアへの対応
+  - [ ] セキュリティの強化
 
 ## 特徴
 - 超軽量・高速
@@ -21,150 +45,92 @@ kurosabiは、Rustの安全性と並列性を活かした、超軽量・高速�
 
 ```toml
 [dependencies]
-kurosabi = "0.3.0"
+kurosabi = "0.3" #最新のものを
 ```
 
 ---
 
 ## はじめかた
 
-### 1. カスタムコンテキストの定義（任意）
-```rust
-pub struct MyContext {
-    pub name: String,
-}
-impl MyContext {
-    pub fn new(name: String) -> Self {
-        MyContext { name }
-    }
-}
-```
-
-### 2. サーバー作成とルート追加
+### 1. インポート
 ```rust
 use std::{path::PathBuf, sync::Arc};
 use kurosabi::{Kurosabi, kurosabi::Context};
+```
 
-#[tokio::main]
-async fn main() {
-    let arc_context = Arc::new(MyContext::new("Kurosabi".to_string()));
-    let mut kurosabi = Kurosabi::with_context(arc_context);
+### 2. サーバー作成とルート追加と実行
+```rust
+fn main() {
+    // Kurosabiのインスタンスを作成します
+    let mut kurosabi = Kurosabi::new();
 
-    // シンプルなテキストレスポンス
-    kurosabi.get("/hello", |mut c| async move {
-        c.res.text("Hello, World!");
+    // ルートハンドラはこのように定義できます。
+    kurosabi.get("/",  |mut c| async move {
+        c.res.text("Hello, Kurosabi!");
         c
     });
 
-    // パスパラメータ
-    kurosabi.get("/hello/:name", |mut c| async move {
-        let name = c.req.path.get_field("name").unwrap_or("World".to_string());
-        c.res.text(&format!("Hello, {}!", name));
+    // method GETで"/field/:field/:value"にアクセスしたときのハンドラを定義します
+    // このハンドラは、URLパスの:fieldと:value部分を取得し、"Field: {field}, Value: {value}"というテキストをレスポンスとして返します
+    kurosabi.get("/field/:field/:value", |mut c| async move {
+        let field = c.req.path.get_field("field").unwrap_or("unknown".to_string());
+        let value = c.req.path.get_field("value").unwrap_or("unknown".to_string());
+        c.res.text(&format!("Field: {}, Value: {}", field, value));
         c
     });
 
-    // ワイルドカード
-    kurosabi.get("/wild/*", |mut c| async move {
+    // method GETで"/gurd/*"にアクセスしたときのハンドラを定義します
+    // このハンドラは、URLパスの*部分を取得し、"Gurd: {path}"というテキストをレスポンスとして返します
+    // *はワイルドカードで、任意の文字列を受け取ります
+    kurosabi.get("/gurd/*", |mut c| async move {
         let path = c.req.path.get_field("*").unwrap_or("unknown".to_string());
-        c.res.text(&format!("Wildcard: {}", path));
+        c.res.text(&format!("Gurd: {}", path));
         c
     });
 
-    // JSONレスポンス
-    kurosabi.get("/json", |mut c| async move {
-        let json_data = r#"{"name": "Kurosabi", "version": "0.1"}"#;
-        c.res.json(json_data);
-        c
-    });
-
-    // ファイルレスポンス
-    kurosabi.get("/file", |mut c| async move {
-        let _ = c.res.file(&c.req, PathBuf::from("README.md"), true).await.unwrap();
-        c
-    });
-
-    // フォーム（GET/POST）
-    kurosabi.get("/submit", |mut c| async move {
-        c.res.html(r#"
-        <form action=\"/submit\" method=\"post\">
-            <input type=\"text\" name=\"data\" placeholder=\"データを入力してください\" />
-            <button type=\"submit\">送信</button>
-        </form>
-        "#);
-        c
-    });
+    // method POSTで"/submit"にアクセスしたときのハンドラを定義します
+    // これはレスポンスデータをそのまま返します
     kurosabi.post("/submit", |mut c| async move {
         let body = match c.req.body_form().await {
             Ok(data) => data,
-            Err(_) => {
+            Err(e) => {
+                println!("Error receiving POST data: {}", e);
                 c.res.set_status(400);
                 return c;
             }
         };
-        c.res.html(&format!("受信: {:?}", body));
+        c.res.html(&format!("Received: {:?}", body));
         c
     });
 
-    // 404ハンドラ
+    // 404 notfound のときのハンドラを定義します
     kurosabi.not_found_handler(|mut c| async move {
-        let html = format!(
-            "<h1>404 Not Found</h1>\n<p>ページが見つかりません。</p>\n<p>debug: {}</p>",
-            c.req.header.get_user_agent().unwrap_or("unknown")
+        let html = html_format!(
+            "<h1>404 Not Found</h1>
+            <p>The page you are looking for does not exist.</p>
+            <p>debug: {{data}}</p>",
+            data = c.req.header.get_user_agent().unwrap_or("unknown")
         );
         c.res.html(&html);
         c.res.set_status(404);
         c
     });
 
-    // サーバー設定
+    // サーバーを設定し組み立てます
     let mut server = kurosabi.server()
         .host([0, 0, 0, 0])
-        .port(8080)
-        .thread(8)
-        .thread_name("kurosabi-worker".to_string())
-        .queue_size(128)
+        .port(8082)
         .build();
 
-    server.run().await;
+    // サーバーを実行します
+    server.run();
 }
+
 ```
 
----
-
-## 応用機能
-
-### カスタムハンドラによるJSON API
-```rust
-use kurosabi::api::GETJsonAPI;
-use serde::Serialize;
-
-#[derive(Clone)]
-pub struct MyAPI;
-#[derive(Serialize)]
-pub struct ResJsonSchemaVersion {
-    pub name: String,
-    pub version: String,
-}
-#[derive(Serialize)]
-#[serde(untagged)]
-pub enum ResJsonSchema {
-    Version(ResJsonSchemaVersion),
-    Error(String),
-}
-
-#[async_trait::async_trait]
-impl GETJsonAPI<Context<Arc<MyContext>>, ResJsonSchema> for MyAPI {
-    fn new() -> Self { MyAPI }
-    async fn handler(self, c: &mut Context<Arc<MyContext>>) -> ResJsonSchema {
-        let name = c.req.path.get_query("name").unwrap_or("Kurosabi".to_string());
-        let version = c.req.path.get_query("version").unwrap_or("0.1".to_string());
-        ResJsonSchema::Version(ResJsonSchemaVersion { name, version })
-    }
-}
-
-// APIルートの登録
-kurosabi.get_json_api("/jsonapi", MyAPI::new());
-```
+## 提案
+提案があればぜひissueへ  
+プルリクもまってます
 
 ---
 
