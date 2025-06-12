@@ -102,7 +102,7 @@ fn main() {
     kurosabi.get("/file", |mut c| async move {
         // stream対応、 range byte対応です inline: true でブラウザで表示されます
         // inline: false でダウンロードされます
-        let _ = c.res.file(&c.req, PathBuf::from("C:/nogera0.mp4"), true, Some("no.mp4")).await.unwrap();
+        let _ = c.res.file(&c.req, PathBuf::from("./README.md"), true, Some("README.md")).await.unwrap();
         c
     });
 
@@ -268,6 +268,7 @@ fn main() {
         .accept_threads(16)
         .build();
 
+    println!("Kurosabi server is running on http://localhost:8082/");
     server.run();
 }
 

@@ -1,8 +1,38 @@
-# 🔥kurosabi🔥
+<div align="center">
+<h1 style="font-size: 50px">🔥kurosabi🔥</h1>
+</div>
 
-Kurosabi is a blazing fast, lightweight, and simple web framework for Rust, designed to leverage Rust's safety and parallelism. Inspired by the TypeScript framework "hono", Kurosabi aims to provide a productive and enjoyable web development experience.
+kurosabi is an ultra-lightweight, fast, and simple web backend router that leverages Rust's safety and parallelism.
 
----
+We value performance, lightweight design, and ease of use.
+
+## Known Issues
+Critical  
+If a worker thread panics, it will not restart, and the number of workers will decrease.  
+If all worker threads are gone, processing will stop.  
+As a temporary workaround, please avoid causing panics such as by using unwrap.
+
+## ToDo
+- Initial Implementation
+  - [x] Implement http_server
+  - [x] Implement router
+  - [x] Implement basic syntax
+- Feature Additions 1
+  - [x] Implement keep_alive
+  - [x] Add server configuration
+  - [x] Add response-related features
+- Optimization 1
+  - [x] Fix keep_alive
+  - [x] Add html format macro
+  - [x] Improve to allow direct TCP stream manipulation
+- Breaking Changes 1
+  - [x] Aggregate everything into Context for easier syntax
+  - [x] Improve http_server for higher throughput
+- Optimization 2
+  - [ ] Improve port handling for TCP operations on Linux
+  - [ ] Make error handling easier
+  - [ ] Support for middleware
+  - [ ] Enhance security
 
 ## Features
 - Ultra-lightweight and fast
@@ -12,91 +42,67 @@ Kurosabi is a blazing fast, lightweight, and simple web framework for Rust, desi
 - JSON and file responses
 - Custom context support
 - Easy 404 and error handling
-- Fine-grained server configuration
-
----
+- Flexible server configuration
 
 ## Installation
-Add Kurosabi to your `Cargo.toml`:
+Add the following to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-kurosabi = "0.3.0"
+kurosabi = "0.3" # Use the latest version
 ```
 
----
+## Try it out
+You can see a demo in the examples with the following command:
+```
+cargo run --example start
+```
 
 ## Getting Started
 
-### 1. Define Your Context (Optional)
-```rust
-pub struct MyContext {
-    pub name: String,
-}
-impl MyContext {
-    pub fn new(name: String) -> Self {
-        MyContext { name }
-    }
-}
-```
-
-### 2. Create the Server and Add Routes
+### 1. Import
 ```rust
 use std::{path::PathBuf, sync::Arc};
 use kurosabi::{Kurosabi, kurosabi::Context};
+```
 
-#[tokio::main]
-async fn main() {
-    let arc_context = Arc::new(MyContext::new("Kurosabi".to_string()));
-    let mut kurosabi = Kurosabi::with_context(arc_context);
+### 2. Create the server, add routes, and run
+```rust
+fn main() {
+    // Create an instance of Kurosabi
+    let mut kurosabi = Kurosabi::new();
 
-    // Simple text response
-    kurosabi.get("/hello", |mut c| async move {
-        c.res.text("Hello, World!");
+    // Define a route handler like this.
+    kurosabi.get("/",  |mut c| async move {
+        c.res.text("Hello, Kurosabi!");
         c
     });
 
-    // Path parameter
-    kurosabi.get("/hello/:name", |mut c| async move {
-        let name = c.req.path.get_field("name").unwrap_or("World".to_string());
-        c.res.text(&format!("Hello, {}!", name));
+    // Define a handler for GET "/field/:field/:value"
+    // This handler gets the :field and :value parts from the URL path and returns "Field: {field}, Value: {value}" as a text response.
+    kurosabi.get("/field/:field/:value", |mut c| async move {
+        let field = c.req.path.get_field("field").unwrap_or("unknown".to_string());
+        let value = c.req.path.get_field("value").unwrap_or("unknown".to_string());
+        c.res.text(&format!("Field: {}, Value: {}", field, value));
         c
     });
 
-    // Wildcard
-    kurosabi.get("/wild/*", |mut c| async move {
+    // Define a handler for GET "/gurd/*"
+    // This handler gets the * part from the URL path and returns "Gurd: {path}" as a text response.
+    // * is a wildcard and accepts any string.
+    kurosabi.get("/gurd/*", |mut c| async move {
         let path = c.req.path.get_field("*").unwrap_or("unknown".to_string());
-        c.res.text(&format!("Wildcard: {}", path));
+        c.res.text(&format!("Gurd: {}", path));
         c
     });
 
-    // JSON response
-    kurosabi.get("/json", |mut c| async move {
-        let json_data = r#"{"name": "Kurosabi", "version": "0.1"}"#;
-        c.res.json(json_data);
-        c
-    });
-
-    // File response
-    kurosabi.get("/file", |mut c| async move {
-        let _ = c.res.file(&c.req, PathBuf::from("README.md"), true).await.unwrap();
-        c
-    });
-
-    // Form (GET and POST)
-    kurosabi.get("/submit", |mut c| async move {
-        c.res.html(r#"
-        <form action=\"/submit\" method=\"post\">
-            <input type=\"text\" name=\"data\" placeholder=\"Enter some data\" />
-            <button type=\"submit\">Submit</button>
-        </form>
-        "#);
-        c
-    });
+    // Define a handler for POST "/submit"
+    // This returns the response data as is.
     kurosabi.post("/submit", |mut c| async move {
         let body = match c.req.body_form().await {
             Ok(data) => data,
-            Err(_) => {
+            Err(e) => {
+                println!("Error receiving POST data: {}", e);
                 c.res.set_status(400);
                 return c;
             }
@@ -105,66 +111,33 @@ async fn main() {
         c
     });
 
-    // 404 handler
+    // Define a handler for 404 not found
     kurosabi.not_found_handler(|mut c| async move {
-        let html = format!(
-            "<h1>404 Not Found</h1>\n<p>The page you are looking for does not exist.</p>\n<p>debug: {}</p>",
-            c.req.header.get_user_agent().unwrap_or("unknown")
+        let html = html_format!(
+            "<h1>404 Not Found</h1>
+            <p>The page you are looking for does not exist.</p>
+            <p>debug: {{data}}</p>",
+            data = c.req.header.get_user_agent().unwrap_or("unknown")
         );
         c.res.html(&html);
         c.res.set_status(404);
         c
     });
 
-    // Server configuration
+    // Configure and build the server
     let mut server = kurosabi.server()
         .host([0, 0, 0, 0])
-        .port(8080)
-        .thread(8)
-        .thread_name("kurosabi-worker".to_string())
-        .queue_size(128)
+        .port(8082)
         .build();
 
-    server.run().await;
+    // Run the server
+    server.run();
 }
 ```
 
----
-
-## Advanced Features
-
-### JSON API with Custom Handler
-```rust
-use kurosabi::api::GETJsonAPI;
-use serde::Serialize;
-
-#[derive(Clone)]
-pub struct MyAPI;
-#[derive(Serialize)]
-pub struct ResJsonSchemaVersion {
-    pub name: String,
-    pub version: String,
-}
-#[derive(Serialize)]
-#[serde(untagged)]
-pub enum ResJsonSchema {
-    Version(ResJsonSchemaVersion),
-    Error(String),
-}
-
-#[async_trait::async_trait]
-impl GETJsonAPI<Context<Arc<MyContext>>, ResJsonSchema> for MyAPI {
-    fn new() -> Self { MyAPI }
-    async fn handler(self, c: &mut Context<Arc<MyContext>>) -> ResJsonSchema {
-        let name = c.req.path.get_query("name").unwrap_or("Kurosabi".to_string());
-        let version = c.req.path.get_query("version").unwrap_or("0.1".to_string());
-        ResJsonSchema::Version(ResJsonSchemaVersion { name, version })
-    }
-}
-
-// Register the API route
-kurosabi.get_json_api("/jsonapi", MyAPI::new());
-```
+## Suggestions
+If you have suggestions, please open an issue.  
+Pull requests are also welcome.
 
 ---
 
