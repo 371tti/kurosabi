@@ -1,5 +1,4 @@
 pub mod worker;
-pub mod kurosabi;
 
 use std::{net::SocketAddr, sync::{atomic::AtomicU64, Arc}, time::Duration};
 
@@ -10,7 +9,7 @@ use log::{error, info};
 use worker::{Worker};
 use std::sync::atomic::Ordering::Relaxed;
 
-use crate::server::{kurosabi::DefaultWorker, worker::Executor};
+use crate::server::worker::{DefaultWorker, Executor};
 
 pub struct KurosabiServer<E> 
 where E: Executor + Send + Sync + 'static {
@@ -495,6 +494,15 @@ where E: Executor + Send + Sync + 'static {
             self.config.host[3],
             self.config.port
         );
+        // Show localhost URL if host is 0.0.0.0 or 127.x.x.x
+        if self.config.host == [0, 0, 0, 0]
+            || self.config.host[0] == 127
+        {
+            info!(
+            "Server also accessible on http://localhost:{}",
+            self.config.port
+            );
+        }
 
         accept_runtime.block_on(async move {
             let listener = self.create_configured_listener();
@@ -534,6 +542,9 @@ where E: Executor + Send + Sync + 'static {
         let socket = Socket::new(Domain::IPV4, socket2::Type::STREAM, Some(Protocol::TCP)).unwrap();
         socket.set_reuse_address(self.config.reuse_address).unwrap();
         socket.set_nodelay(self.config.nodelay).unwrap();
+
+
+
         socket.bind(&addr.into()).unwrap();
         socket.set_reuse_address(self.config.reuse_address).unwrap();
 

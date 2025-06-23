@@ -22,7 +22,7 @@ html_format = "0.2.2"
 mime_guess = "2"
 tokio-util = { version = "0.7", features = ["io"] }
 brotli = "8.0.1" # 通信圧縮
-async-compression = { version = "0.4.24", features = ["tokio", "brotli"] }
+async-compression = { version = "0.4.25", features = ["tokio", "brotli"] }
 
 # main 用
 futures = "0.3.31"

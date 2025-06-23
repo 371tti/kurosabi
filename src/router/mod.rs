@@ -305,6 +305,11 @@ impl<C: 'static> GenRouter<Arc<BoxedHandler<C>>> for DefaultRouter<C> {
         for (key, (s, e)) in params {
             req.path.set_field(key, &path[s..e]);
         }
-        node.handler.clone()
+
+        if let Some(h) = node.handler.as_ref() {
+            return Some(h.clone());
+        }
+
+        self.not_found_handler.clone()
     }
 }
