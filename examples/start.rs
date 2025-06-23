@@ -1,4 +1,4 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{env, path::PathBuf, sync::Arc};
 
 use kurosabi::{
     api::GETJsonAPI, html_format, kurosabi::Context, Kurosabi
@@ -77,6 +77,7 @@ impl GETJsonAPI<Context<Arc<MyContext>>, ResJsonSchema> for MyAPI {
 
 fn main() {
     // ログの初期化
+    env_logger::init_from_env(env_logger::Env::default().default_filter_or("debug"));
 
 
     // Arc<Context>を作成します

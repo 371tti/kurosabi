@@ -57,7 +57,6 @@ cargo run --example start
 
 ### 1. インポート
 ```rust
-use std::{path::PathBuf, sync::Arc};
 use kurosabi::{Kurosabi, kurosabi::Context};
 ```
 

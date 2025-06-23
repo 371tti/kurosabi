@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔥kurosabi🔥 - 超軽量・高速・シンプルなWebバックエンドルーター</title>
+    <link rel="stylesheet" href="kurosabi.css">
+</head>
+<body>
+    <div class="bg-pattern"></div>
+    <div class="container">
+        <div class="header">
+            <h1 class="title">🔥kurosabi🔥</h1>
+            <p class="subtitle">Rustの安全性と並列性を活かした、超軽量・高速・シンプルなWebバックエンドルーター</p>
+            <p class="tagline">パフォーマンスと軽量さ、書きやすさ を大事にします</p>
+        </div>
+
+        <div class="section">
+            <h2>📋 ToDo</h2>
+            <div class="todo-list">
+                <h3>初期実装</h3>
+                <div class="todo-item completed">✅ http_serverの実装</div>
+                <div class="todo-item completed">✅ ルーターの実装</div>
+                <div class="todo-item completed">✅ 基本的な構文の実装</div>
+                
+                <h3>機能追加 1</h3>
+                <div class="todo-item completed">✅ keep_alive の実装</div>
+                <div class="todo-item completed">✅ サーバー設定の追加</div>
+                <div class="todo-item completed">✅ レスポンス関連の機能追加</div>
+                
+                <h3>最適化 1</h3>
+                <div class="todo-item completed">✅ keep_aliveを修正</div>
+                <div class="todo-item completed">✅ htmlのフォーマットマクロを追加</div>
+                <div class="todo-item completed">✅ TCPストリームを直接操作できるように改良</div>
+                
+                <h3>破壊的変更 1</h3>
+                <div class="todo-item completed">✅ 構文をより扱いやすくするため Contextにすべて集約</div>
+                <div class="todo-item completed">✅ http_serverをよりスループットの高いように改良</div>
+                
+                <h3>最適化 2</h3>
+                <div class="todo-item pending">⏳ linuxでTCP操作でport関連の改良</div>
+                <div class="todo-item pending">⏳ エラーハンドリングをもっと楽に</div>
+                <div class="todo-item pending">⏳ ミドルウェアへの対応</div>
+                <div class="todo-item pending">⏳ セキュリティの強化</div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>✨ 特徴</h2>
+            <div class="features">
+                <div class="feature-card">
+                    <h3>⚡ 超軽量・高速</h3>
+                    <p>Rustの性能を最大限活用</p>
+                </div>
+                <div class="feature-card">
+                    <h3>🎯 シンプルルーティング</h3>
+                    <p>表現力の高いルーティング</p>
+                </div>
+                <div class="feature-card">
+                    <h3>🔄 非同期対応</h3>
+                    <p>非同期ハンドラ完全対応</p>
+                </div>
+                <div class="feature-card">
+                    <h3>🛣️ パスパラメータ</h3>
+                    <p>ワイルドカード対応</p>
+                </div>
+                <div class="feature-card">
+                    <h3>📦 多様なレスポンス</h3>
+                    <p>JSON・ファイルレスポンス</p>
+                </div>
+                <div class="feature-card">
+                    <h3>🔧 カスタマイズ</h3>
+                    <p>柔軟なサーバー設定</p>
+                </div>
+            </div>
+        </div>
+        <div class="section">
+            <h2>📦 インストール</h2>
+            <p><code>Cargo.toml</code>に以下を追加してください：</p>
+            <div class="code-block">[dependencies]<br>kurosabi = "0.3" # 最新版</div>
+        </div>
+
+        <div class="section">
+            <h2>🚀 試す</h2>
+            <p>以下のコマンドでexamplesのデモを見れます：</p>
+            <div class="code-block">cargo run --example start</div>
+            <div style="text-align: center; margin: 32px 0;">
+                <a href="#" class="cta-button">🎮 今すぐ試す</a>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>📚 はじめかた</h2>
+            
+            <h3>1. インポート</h3>
+            <div class="code-block">use kurosabi::{Kurosabi, kurosabi::Context};</div>
+            
+            <h3>2. サーバー作成とルート追加と実行</h3>
+            <div class="code-block">fn main() {<br>&nbsp;&nbsp;&nbsp;&nbsp;// Kurosabiのインスタンスを作成<br>&nbsp;&nbsp;&nbsp;&nbsp;let mut kurosabi = Kurosabi::new();<br><br>&nbsp;&nbsp;&nbsp;&nbsp;// ルートハンドラの定義<br>&nbsp;&nbsp;&nbsp;&nbsp;kurosabi.get("/", |mut c| async move {<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;c.res.text("Hello, Kurosabi!");<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;c<br>&nbsp;&nbsp;&nbsp;&nbsp;});<br><br>&nbsp;&nbsp;&nbsp;&nbsp;// パスパラメータの例<br>&nbsp;&nbsp;&nbsp;&nbsp;kurosabi.get("/field/:field/:value", |mut c| async move {<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;let field = c.req.path.get_field("field").unwrap_or("unknown".to_string());<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;let value = c.req.path.get_field("value").unwrap_or("unknown".to_string());<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;c.res.text(&format!("Field: {}, Value: {}", field, value));<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;c<br>&nbsp;&nbsp;&nbsp;&nbsp;});<br><br>&nbsp;&nbsp;&nbsp;&nbsp;// サーバーを実行<br>&nbsp;&nbsp;&nbsp;&nbsp;kurosabi.server().build().run();<br>}</div>
+        </div>
+
+        <div class="section">
+            <h2>💡 提案</h2>
+            <p>提案があればぜひissueへ<br>プルリクもまってます</p>
+            <div style="text-align: center; margin: 32px 0;">
+                <a href="#" class="cta-button">📝 Issue作成</a>
+                <a href="#" class="cta-button">🔧 Pull Request</a>
+            </div>
+        </div>
+
+        <div class="footer">
+            <h2>📄 ライセンス</h2>
+            <p>MIT</p>
+            <hr>
+            <p>🔥 Built with kurosabi 🔥</p>
+        </div>
+    </div>
+</body>
+</html>

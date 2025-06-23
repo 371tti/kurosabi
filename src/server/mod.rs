@@ -5,7 +5,7 @@ use std::{net::SocketAddr, sync::{atomic::AtomicU64, Arc}, time::Duration};
 use crossbeam_queue::ArrayQueue;
 use socket2::{Domain, Protocol, Socket, TcpKeepalive};
 use tokio::{self, io::AsyncWriteExt, net::TcpListener};
-use log::{error, info};
+use log::{debug, error, info};
 use worker::{Worker};
 use std::sync::atomic::Ordering::Relaxed;
 
@@ -509,7 +509,7 @@ where E: Executor + Send + Sync + 'static {
             loop {
                 match listener.accept().await {
                     Ok((socket, addr)) => {
-                        info!("Accepted connection from {}", addr);
+                        debug!("Accepted connection from {}", addr);
                         let connection = TcpConnection::new(socket);
                         let first_idle_worker = self.workers_load.iter().enumerate().find_map(|(worker_id, load)| {
                             if load.load(Relaxed) == 0 {
