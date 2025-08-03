@@ -2,6 +2,8 @@
 <h1 style="font-size: 50px">🔥kurosabi🔥</h1>
 </div>
 
+(en)[https://github.com/371tti/kurosabi/blob/master/README-jp.md] | (en)
+
 kurosabi is an ultra-lightweight, fast, and simple web backend router that leverages Rust's safety and parallelism.
 
 We value performance, lightweight design, and ease of use.
