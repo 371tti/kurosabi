@@ -94,16 +94,18 @@ impl<C: 'static> GenRouter<Arc<BoxedHandler<C>>> for DefaultRouter<C> {
     fn route(&self, req: &mut Req) -> Option<Arc<BoxedHandler<C>>> {
         let clean_path: String;
         {
-            // borrow はこの中のみ
             let tmp = &req.path.path;
             clean_path = tmp.split(&['?','#'][..]).next().unwrap()
                             .trim_start_matches('/')
                             .to_owned();
         }
+
+        // 完全一致のルートをハンドル
         if let Some(h) = self.exact.get(&(req.method.clone(), clean_path.clone())) {
             return Some(h.clone());
         }
 
+        // 動的ルートのハンドル
         let segs: Vec<&str> = clean_path.split('/').collect();
         if let Some(pats) = self.fuzzy.get(&(req.method.clone(), segs.len())) {
             'outer: for pat in pats {

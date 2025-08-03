@@ -5,7 +5,9 @@ use kurosabi::Kurosabi;
 
 
 
-
+// 371tti.netでも使ったバグ
+// このコードで/tool/speed_runnerにアクセスすると、404が返ってくる
+// 修正済み
 #[test]
 fn main() {
     env_logger::try_init_from_env(env_logger::Env::default().default_filter_or("debug")).unwrap_or_else(|_| ());
@@ -163,6 +165,7 @@ fn main() {
     server.run();
 }
 
+// router の機能確認
 #[test]
 fn test_router() {
     env_logger::try_init_from_env(env_logger::Env::default().default_filter_or("debug")).unwrap_or_else(|_| ());
