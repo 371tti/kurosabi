@@ -51,7 +51,7 @@ where
     }
 
     #[inline]
-    fn register_route<F, Fut>(&mut self, method: Method, pattern: &str, handler: F)
+    pub fn register_route<F, Fut>(&mut self, method: Method, pattern: &str, handler: F)
     where
         F: Fn(Context<C>) -> Fut + Send + Sync + 'static,
         Fut: std::future::Future<Output = Context<C>> + Send + 'static,
