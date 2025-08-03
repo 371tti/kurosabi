@@ -541,7 +541,7 @@ where E: Executor + Send + Sync + 'static {
         let addr = SocketAddr::from((self.config.host, self.config.port));
         let socket = Socket::new(Domain::IPV4, socket2::Type::STREAM, Some(Protocol::TCP)).unwrap();
         socket.set_reuse_address(self.config.reuse_address).unwrap();
-        socket.set_nodelay(self.config.nodelay).unwrap();
+        socket.set_tcp_nodelay(self.config.nodelay).unwrap();
 
 
 
