@@ -203,6 +203,14 @@ fn test_router() {
         c
     });
 
+    // url queryのテスト
+    kurosabi.get("/url_query", |mut c| async move {
+        let name = c.req.path.get_query("name").unwrap_or("World".to_string());
+        let age = c.req.path.get_query("age").unwrap_or("unknown".to_string());
+        c.res.text(format!("Name: {}, Age: {}", name, age).as_str());
+        c
+    });
+
     kurosabi.not_found_handler(|mut c| async move {
         c.res.text("Custom 404 Not Found");
         c.res.code = 404;
