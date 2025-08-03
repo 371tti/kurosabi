@@ -12,7 +12,7 @@ where
     R: GenRouter<Arc<BoxedHandler<C>>> + 'static,
 {
     router: R,
-    context: C
+    context: C,
 }
 
 impl Kurosabi<DefaultContext, DefaultRouter<DefaultContext>> {
@@ -63,7 +63,7 @@ where
                 + Send
                 + Sync,
         > = Box::new(move |c| Box::pin(handler(c)));
-        self.router.regist(method, pattern, std::sync::Arc::new(boxed_handler));
+        self.router.regist(method, pattern, Arc::new(boxed_handler));
     }
 
     pub fn get<F, Fut>(&mut self, pattern: &str, handler: F)
@@ -283,6 +283,7 @@ where
             
             // コンテキストをクローン
             let context_data: C = (*self.context).clone();
+            
             // ルーティング
             if let Some(handler) = self.router.route(&mut req) {
                 let res = Res::new();
