@@ -95,7 +95,7 @@ impl<C: 'static> GenRouter<Arc<BoxedHandler<C>>> for DefaultRouter<C> {
         let clean_path: String;
         {
             let tmp = &req.path.path;
-            clean_path = tmp.split(&['?','#'][..]).next().unwrap()
+            clean_path = tmp.split(&['?', '#']).next().unwrap()
                             .trim_start_matches('/')
                             .to_owned();
         }
