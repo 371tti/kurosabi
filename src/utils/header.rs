@@ -182,6 +182,67 @@ impl Header {
         self.set("Set-Cookie", &format!("{}={}", key, value));
     }
 
+    /// head: set_cookie をセットする
+    /// 追加のオプション（例: Path, Domain, Expires, Secure, HttpOnly, SameSiteなど）に対応
+    #[inline]
+    pub fn set_cookie_options(&mut self, key: &str, value: &str, options: Option<&[(&str, &str)]>) {
+        let mut cookie = format!("{}={}", key, value);
+        if let Some(opts) = options {
+            for (opt_key, opt_value) in opts {
+                if opt_value.is_empty() {
+                    // Secure, HttpOnly など値なしオプション
+                    cookie.push_str(&format!("; {}", opt_key));
+                } else {
+                    cookie.push_str(&format!("; {}={}", opt_key, opt_value));
+                }
+            }
+        }
+        self.set("Set-Cookie", &cookie);
+    }
+
+    /// head: set_cookie_with_params をセットする
+    #[inline]
+    pub fn set_cookie_with_params(
+        &mut self,
+        key: &str,
+        value: &str,
+        secure: bool,
+        http_only: bool,
+        path: Option<&str>,
+        same_site: Option<&str>,
+        max_age: Option<i64>,
+        domain: Option<&str>,
+        expires: Option<&str>,
+        priority: Option<&str>,
+    ) {
+        let mut cookie = format!("{}={}", key, value);
+        if secure {
+            cookie.push_str("; Secure");
+        }
+        if http_only {
+            cookie.push_str("; HttpOnly");
+        }
+        if let Some(path) = path {
+            cookie.push_str(&format!("; Path={}", path));
+        }
+        if let Some(domain) = domain {
+            cookie.push_str(&format!("; Domain={}", domain));
+        }
+        if let Some(expires) = expires {
+            cookie.push_str(&format!("; Expires={}", expires));
+        }
+        if let Some(same_site) = same_site {
+            cookie.push_str(&format!("; SameSite={}", same_site));
+        }
+        if let Some(max_age) = max_age {
+            cookie.push_str(&format!("; Max-Age={}", max_age));
+        }
+        if let Some(priority) = priority {
+            cookie.push_str(&format!("; Priority={}", priority));
+        }
+        self.set("Set-Cookie", &cookie);
+    }
+
     /// head: del_cookie を削除する
     #[inline]
     pub fn del_cookie(&mut self, key: &str) {
