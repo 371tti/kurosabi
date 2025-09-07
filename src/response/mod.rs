@@ -26,6 +26,15 @@ impl Res {
     pub fn set_status(&mut self, code: u16) {
         self.code = code;
     }
+
+    #[inline]
+    pub fn clear(&mut self) {
+        self.code = 200;
+        self.header.clear();
+        self.body = Body::Empty;
+        self.compress_enabled = true;
+        self.compress_config = CompressionConfig::Optimal;
+    }
 }
 
 impl Res {

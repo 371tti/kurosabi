@@ -30,6 +30,11 @@ impl Header {
         self.headers.retain(|(k, _)| k.to_ascii_uppercase() != key);
     }
 
+    #[inline]
+    pub fn clear(&mut self) {
+        self.headers.clear();
+    }
+
     /// ヘッダを削除する
     /// 複数ある場合は、全て削除します
     #[inline]
