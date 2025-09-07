@@ -1,21 +1,27 @@
-use std::{env, path::PathBuf, sync::Arc};
+use std::{path::PathBuf, sync::Arc};
 
 use kurosabi::{
-    api::GETJsonAPI, html_format, kurosabi::Context, Kurosabi
+    api::GETJsonAPI, context::ContextMiddleware, html_format, kurosabi::Context, Kurosabi
 };
 use serde::Serialize;
 use futures::stream::{StreamExt};
 
+#[derive(Clone)]
 pub struct MyContext {
-    pub name: String,
+    // Arcを使うことで、MyContextのインスタンスを複数のスレッドで安全に共有できます
+    // これにより、コンテキストのクローンが軽量になります
+    // データを共有する場合はArcを使うことをおすすめします
+    // リクエスト毎に設定されるデータは普通に書きます
+    pub name: Arc<String>,
 }
 
 impl MyContext {
     pub fn new(name: String) -> Self {
-        MyContext { name }
+        MyContext { name: Arc::new(name) }
     }
 }
 
+impl ContextMiddleware<Context<MyContext>> for MyContext {}
 
 /// json api(GET)の実装方法
 /// kurosabiはjson apiをrustのstructで受け取り、送信できます (serdeによる)
@@ -49,7 +55,7 @@ pub enum ResJsonSchema {
 /// `Context<Arc<MyContext>>`は、リクエストのコンテキストを表します
 /// `ResJsonSchema`は、レスポンスの型を表します
 #[async_trait::async_trait]
-impl GETJsonAPI<Context<Arc<MyContext>>, ResJsonSchema> for MyAPI {
+impl GETJsonAPI<Context<MyContext>, ResJsonSchema> for MyAPI {
     /// 新しいAPIのインスタンスを作成します
     fn new() -> Self {
         MyAPI
@@ -59,7 +65,7 @@ impl GETJsonAPI<Context<Arc<MyContext>>, ResJsonSchema> for MyAPI {
     /// `self`はAPIのインスタンスを表し、`c`はリクエストのコンテキストを表します
     async fn handler(
             self,
-            c: &mut Context<Arc<MyContext>>,
+            c: &mut Context<MyContext>,
         ) -> ResJsonSchema {
             // クエリパラメータからnameとversionを取得します
             let name = c.req.path.get_query("name").unwrap_or("Kurosabi".to_string());
@@ -83,7 +89,7 @@ fn main() {
     // Arc<Context>を作成します
     // Arcはスレッドセーフな参照カウント型で、複数のスレッドで共有できます
     // べつにArcじゃなくてもいいです(kurosabiはリクエスト毎にコンテキストをcloneします
-    let arc_context = Arc::new(MyContext::new("Kurosabi".to_string()));
+    let arc_context = MyContext::new("Kurosabi".to_string());
 
     // Kurosabiのインスタンスを作成します
     let mut kurosabi = Kurosabi::with_context(arc_context);

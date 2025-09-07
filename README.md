@@ -31,7 +31,7 @@ As a temporary workaround, please avoid causing panics such as by using unwrap.
 - Optimization 2
   - [ ] Improve port handling for TCP operations on Linux
   - [ ] Make error handling easier
-  - [ ] Support for middleware
+  - [x] Support for middleware
   - [ ] Enhance security
 
 ## Features
@@ -49,7 +49,7 @@ Add the following to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-kurosabi = "0.3" # Use the latest version
+kurosabi = "0.4" # Use the latest version
 ```
 
 ## Try it out

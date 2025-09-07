@@ -2,13 +2,14 @@ use std::{pin::Pin, sync::Arc};
 use log::{debug, error, info, warn};
 
 use crate::api::{GETJsonAPI, POSTJsonAPI};
+use crate::context::ContextMiddleware;
 use crate::error::HttpError;
 use crate::server::worker::Executor;
 use crate::{context::DefaultContext, request::Req, response::Res, router::{BoxedHandler, DefaultRouter, GenRouter}, server::{KurosabiServerBuilder, TcpConnection}};
 use crate::utils::method::Method;
 pub struct Kurosabi<C, R>
 where
-    C: Clone + 'static,
+    C: Clone + 'static ,
     R: GenRouter<Arc<BoxedHandler<C>>> + 'static,
 {
     router: R,
@@ -26,7 +27,7 @@ impl Kurosabi<DefaultContext, DefaultRouter<DefaultContext>> {
 
 impl<C> Kurosabi<C, DefaultRouter<C>>
 where
-    C: Clone + Sync + Send + 'static,
+    C: Clone + Sync + Send + 'static + ContextMiddleware<Context<C>>,
 {
     /// コンテキストを指定して初期化する
     pub fn with_context(context: C) -> Kurosabi<C, DefaultRouter<C>> {
@@ -39,7 +40,7 @@ where
 
 impl<C, R> Kurosabi<C, R>
 where
-    C: Clone + Sync + Send + 'static,
+    C: Clone + Sync + Send + 'static + ContextMiddleware<Context<C>>,
     R: GenRouter<Arc<BoxedHandler<C>>> + 'static,
 {
     /// コンテキストとルーターを指定して初期化する
@@ -251,8 +252,8 @@ pub struct Context<C> {
 
 #[async_trait::async_trait]
 impl<C, R> Executor for DefaultWorker<C, R>
-where
-    C: Clone + Sync + Send + 'static,
+    where
+    C: Clone + Sync + Send + 'static + ContextMiddleware<Context<C>>,
     R: GenRouter<Arc<BoxedHandler<C>>>,
 {
     async fn execute(&self, connection: TcpConnection) {
@@ -292,9 +293,15 @@ where
                     res,
                     c: Box::new(context_data),
                 };
-                
+
+                // ミドルウェアの前処理
+                context = C::before_handle(context).await;
+
                 // ハンドラを実行
                 context = handler(context).await;
+
+                // ミドルウェアの後処理
+                context = C::after_handle(context).await;
 
                 let ps_time = ps_time.elapsed();
 
