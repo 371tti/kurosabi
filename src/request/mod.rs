@@ -1,6 +1,7 @@
 pub mod path;
 
 use path::Path;
+use serde::de::DeserializeOwned;
 use tokio::{io::{AsyncBufReadExt, AsyncReadExt, BufReader}, net::tcp::OwnedReadHalf};
 
 use serde_json;
@@ -154,5 +155,11 @@ impl Req {
     #[inline]
     pub async fn body_stream(&mut self) -> &mut BufReader<OwnedReadHalf> {
         self.connection.reader()    
+    }
+
+    #[inline]
+    pub async fn body_de_struct<T: DeserializeOwned>(&mut self) -> Result<T, HttpError> {
+        let body = self.body_string().await?;
+        serde_json::from_str(&body).map_err(|e| HttpError::InternalServerError(e.to_string()))
     }
 }
