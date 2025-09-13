@@ -45,18 +45,18 @@ pub enum Method {
 impl Method {
     /// 文字列からMethodを取得する
     #[inline]
-    pub fn from_str(method: &str) -> Option<Method> {
+    pub fn from_str(method: &str) -> Method {
         match method {
-            "GET" => Some(Method::GET),
-            "POST" => Some(Method::POST),
-            "HEAD" => Some(Method::HEAD),
-            "PUT" => Some(Method::PUT),
-            "DELETE" => Some(Method::DELETE),
-            "OPTIONS" => Some(Method::OPTIONS),
-            "TRACE" => Some(Method::TRACE),
-            "CONNECT" => Some(Method::CONNECT),
-            "PATCH" => Some(Method::PATCH),
-            method => Some(Method::UNKNOWN(method.to_string())),
+            "GET" => Method::GET,
+            "POST" => Method::POST,
+            "HEAD" => Method::HEAD,
+            "PUT" => Method::PUT,
+            "DELETE" => Method::DELETE,
+            "OPTIONS" => Method::OPTIONS,
+            "TRACE" => Method::TRACE,
+            "CONNECT" => Method::CONNECT,
+            "PATCH" => Method::PATCH,
+            method => Method::UNKNOWN(method.to_string()),
         }
     }
 

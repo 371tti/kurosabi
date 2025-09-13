@@ -41,6 +41,8 @@ enum Seg {
 pub struct DefaultRouter<C> {
     exact: Map<(Method, String), Arc<BoxedHandler<C>>>,
     fuzzy: Map<(Method, usize), Vec<Pattern<C>>>,
+    // 末尾ワイルドカード用（可変長マッチ）
+    wild: Map<Method, Vec<Pattern<C>>>,
     not_found: Option<Arc<BoxedHandler<C>>>,
 }
 
@@ -49,6 +51,7 @@ impl<C> DefaultRouter<C> {
         Self {
             exact: Map::default(),
             fuzzy: Map::default(),
+            wild: Map::default(),
             not_found: None,
         }
     }
@@ -70,6 +73,7 @@ impl<C: 'static> GenRouter<Arc<BoxedHandler<C>>> for DefaultRouter<C> {
         }
 
         let mut segs = Vec::new();
+        let mut has_wild = false;
         for (i, s) in path.split('/').enumerate() {
             match s.as_bytes()[0] {
                 b':' => segs.push(Seg::Param(s[1..].into())),
@@ -77,14 +81,19 @@ impl<C: 'static> GenRouter<Arc<BoxedHandler<C>>> for DefaultRouter<C> {
                     assert!(i == path.split('/').count() - 1,
                         "wildcard '*' must be terminal: {pattern}");
                     segs.push(Seg::Wild);
+                    has_wild = true;
                 }
                 _ => segs.push(Seg::Lit(s.into())),
             }
         }
 
-        self.fuzzy.entry((method, segs.len()))
-            .or_default()
-            .push(Pattern { segs, handler: ex });
+        if has_wild {
+            self.wild.entry(method).or_default().push(Pattern { segs, handler: ex });
+        } else {
+            self.fuzzy.entry((method, segs.len()))
+                .or_default()
+                .push(Pattern { segs, handler: ex });
+        }
     }
 
     fn build(&mut self) {
@@ -105,23 +114,51 @@ impl<C: 'static> GenRouter<Arc<BoxedHandler<C>>> for DefaultRouter<C> {
             return Some(h.clone());
         }
 
-        // 動的ルートのハンドル
-        let segs: Vec<&str> = clean_path.split('/').collect();
+        // セグメントへ（空要素は除外して正規化）
+        let segs: Vec<&str> = clean_path.split('/')
+            .filter(|s| !s.is_empty())
+            .collect();
+
+        // 動的ルート（ワイルドカード無し）
         if let Some(pats) = self.fuzzy.get(&(req.method.clone(), segs.len())) {
-            'outer: for pat in pats {
+            'outer_fuzzy: for pat in pats {
                 for (pseg, iseg) in pat.segs.iter().zip(&segs) {
                     match pseg {
-                        Seg::Lit(l)   => if l != iseg { continue 'outer; },
+                        Seg::Lit(l)   => if l != iseg { continue 'outer_fuzzy; },
                         Seg::Param(n) => req.path.set_field(n, iseg),
-                        Seg::Wild     => {
-                            req.path.set_field("*", &segs.join("/"));
-                            return Some(pat.handler.clone());
-                        }
+                        Seg::Wild     => unreachable!(),
                     }
                 }
                 return Some(pat.handler.clone());
             }
         }
+
+        // 末尾ワイルドカード（可変長、0個以上）
+        if let Some(pats) = self.wild.get(&req.method) {
+            'outer_wild: for pat in pats {
+                let prefix_len = pat.segs.len().saturating_sub(1);
+                if segs.len() < prefix_len { continue 'outer_wild; }
+
+                for (i, pseg) in pat.segs.iter().take(prefix_len).enumerate() {
+                    match pseg {
+                        Seg::Lit(l)   => if l != &segs[i] { continue 'outer_wild; },
+                        Seg::Param(n) => req.path.set_field(n, segs[i]),
+                        Seg::Wild     => unreachable!(),
+                    }
+                }
+                // '*' には残りの全パスを結合
+                let rest = if segs.len() > prefix_len {
+                    segs[prefix_len..].join("/")
+                } else {
+                    String::new()
+                };
+                // 残りが空（/url や /url/）はマッチさせない
+                if rest.is_empty() { continue 'outer_wild; }
+                req.path.set_field("*", &rest);
+                return Some(pat.handler.clone());
+            }
+        }
+
         self.not_found.clone()
     }
 }

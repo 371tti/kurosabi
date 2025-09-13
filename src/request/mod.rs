@@ -55,43 +55,35 @@ impl Req {
         let reader = self.connection.reader();
         let mut line_buf = String::with_capacity(1024);
 
-        // Request line
-        line_buf.clear();
+        // Parse the request line first
         reader
             .read_line(&mut line_buf)
             .await
             .map_err(KurosabiError::IoError)?;
-        // 明示的にCRLFを除去
-        let req_line = line_buf.trim_end_matches(['\r', '\n']);
-        let parts: Vec<&str> = req_line.split_whitespace().collect();
+        let parts: Vec<&str> = line_buf.trim().split_whitespace().collect();
         if parts.len() < 3 {
-            return Err(KurosabiError::InvalidHttpHeader(req_line.to_string()));
+            return Err(KurosabiError::InvalidHttpHeader(line_buf));
         }
 
-        let method = Method::from_str(parts[0]).unwrap();
+        let method = Method::from_str(parts[0]);
         let path = Path::new(parts[1]);
         let version = parts[2].to_string();
         let mut header = Header::new();
 
-        // Header lines
         loop {
             line_buf.clear();
             reader
                 .read_line(&mut line_buf)
                 .await
                 .map_err(KurosabiError::IoError)?;
-
-            // CRLF除去後の空行で終了
-            let raw = line_buf.trim_end_matches(['\r', '\n']);
-            if raw.is_empty() {
+            let trimmed = line_buf.trim();
+            if trimmed.is_empty() {
                 break;
             }
-
-            // ": "固定ではなく":"で分割し、key/valueをtrim
-            if let Some((key, value)) = raw.split_once(':') {
-                header.set(key.trim(), value.trim());
+            if let Some((key, value)) = trimmed.split_once(": ") {
+                header.set(key, value);
             } else {
-                return Err(KurosabiError::InvalidHttpHeader(raw.to_string()));
+                return Err(KurosabiError::InvalidHttpHeader(line_buf));
             }
         }
         self.method = method;
