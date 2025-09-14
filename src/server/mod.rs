@@ -460,15 +460,19 @@ where E: Executor + Send + Sync + 'static {
     pub fn run(&mut self) {
         let workers_load = Arc::clone(&self.workers_load); // Arcをクローン
         let proc_executor = Arc::clone(&self.proc_executor); // Arcをクローン
-    
-        for worker_id in 0..self.config.thread {
-            let worker = DefaultWorker::new(
-                tokio::runtime::Builder::new_multi_thread()
-                    .worker_threads(1)
+
+        let rt = Arc::new(tokio::runtime::Builder::new_multi_thread()
+                    .worker_threads(self.config.thread)
                     .thread_name(self.config.thread_name.clone())
                     .enable_all()
                     .build()
-                    .expect("Failed to create Tokio runtime"),
+                    .expect("Failed to create Tokio runtime"));
+
+                proc_executor.e
+    
+        for worker_id in 0..self.config.thread {
+            let worker = DefaultWorker::new(
+                rt.handle().clone(),
                 Arc::clone(&proc_executor), // クローンしたArcを渡す
                 Arc::clone(&self.global_queue),
                 workers_load.clone(), // クローンしたArcを渡す

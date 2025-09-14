@@ -4,7 +4,7 @@ use std::sync::{atomic::AtomicU64, Arc};
 use crossbeam_queue::ArrayQueue;
 use futures::FutureExt;
 use log::{error, warn};
-use tokio::runtime::Runtime;
+use tokio::runtime::{Handle, Runtime};
 use tokio::sync::Notify;
 
 use super::TcpConnection;
@@ -13,7 +13,7 @@ use std::sync::atomic::Ordering::Relaxed;
 use std::sync::atomic::Ordering::SeqCst;
 pub trait Worker<E>: Send + Sync 
 where E: Executor {
-    fn new(runtime: Runtime, executor: Arc<E>, grobal_queue: Arc<ArrayQueue<TcpConnection>>, workers_load: Arc<Box<[AtomicU64]>>, my_worker_id: u32) -> Self;
+    fn new(runtime: Handle, executor: Arc<E>, grobal_queue: Arc<ArrayQueue<TcpConnection>>, workers_load: Arc<Box<[AtomicU64]>>, my_worker_id: u32) -> Self;
     fn execute(&self, connection: TcpConnection);
     fn run(&self);
 }
@@ -21,7 +21,7 @@ where E: Executor {
 pub struct DefaultWorker<E>
 where E: Executor {
     pub executor: Arc<E>,
-    pub runtime: Arc<Runtime>,
+    pub runtime: Handle,
     pub notify: Arc<Notify>,
     pub grobal_queue: Arc<ArrayQueue<TcpConnection>>,
     pub workers_load: Arc<Box<[AtomicU64]>>, // Fixed the syntax for Arc<Box<[AtomicU64]>
@@ -45,9 +45,9 @@ impl<'a> Drop for LoadGuard<'a> {
 
 impl<E> Worker<E> for DefaultWorker<E>
 where E: Executor + Send + Sync + 'static {
-    fn new(runtime: Runtime, executor: Arc<E>, grobal_queue: Arc<ArrayQueue<TcpConnection>>, workers_load: Arc<Box<[AtomicU64]>>, worker_id: u32) -> Self {
+    fn new(runtime: Handle, executor: Arc<E>, grobal_queue: Arc<ArrayQueue<TcpConnection>>, workers_load: Arc<Box<[AtomicU64]>>, worker_id: u32) -> Self {
         DefaultWorker {
-            runtime: Arc::new(runtime),
+            runtime: runtime,
             executor,
             notify: Arc::new(Notify::new()),
             grobal_queue,
@@ -60,12 +60,11 @@ where E: Executor + Send + Sync + 'static {
         self.notify.notify_one(); // 必ず通知
         let my_load = Arc::clone(&self.workers_load); // Arc<[AtomicU64]>をクローン
         let executor = Arc::clone(&self.executor);
-        let runtime = Arc::clone(&self.runtime);
         let worker_id = self.worker_id;
     
-        runtime.spawn(async move {
+        self.runtime.spawn(async move {
             let _guard = LoadGuard::new(&my_load[worker_id as usize]);
-             let res = AssertUnwindSafe(executor.execute(connection))
+            let res = AssertUnwindSafe(executor.execute(connection))
                 .catch_unwind()
                 .await;
             if let Err(panic_info) = res {
@@ -75,7 +74,7 @@ where E: Executor + Send + Sync + 'static {
     }
 
     fn run(&self) {
-        let rt = Arc::clone(&self.runtime);
+        let rt = self.runtime.clone();
         let worker_num = self.workers_load.len() as u64;
         let workers_load = self.workers_load.clone();
         let grobal_queue = Arc::clone(&self.grobal_queue);
