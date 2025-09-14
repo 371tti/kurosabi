@@ -4,7 +4,7 @@ use std::{net::SocketAddr, sync::{atomic::AtomicU64, Arc}, time::Duration};
 
 use crossbeam_queue::ArrayQueue;
 use socket2::{Domain, Protocol, Socket, TcpKeepalive};
-use tokio::{self, io::AsyncWriteExt, net::TcpListener};
+use tokio::{self, io::AsyncWriteExt, net::TcpListener, runtime::Handle};
 use log::{debug, error, info};
 use worker::{Worker};
 use std::sync::atomic::Ordering::Relaxed;
@@ -429,7 +429,6 @@ where
     }
 
     /// Sets the number of accept threads.
-    /// 未設定時はワーカースレッド数の半分を使用します。
     pub fn accept_threads(mut self, count: usize) -> Self {
         self.config.accept_threads = Some(count);
         self
@@ -459,27 +458,117 @@ where
         }
     }
 }
-
 impl<E, C> KurosabiServer<E, C> 
 where 
     E: Executor<C> + Send + Sync + 'static,
     C: Clone + Sync + Send + 'static + ContextMiddleware<C>,
 {
+    /// Starts the server asynchronously without blocking the current thread.
+    ///
+    /// Use this from an existing Tokio runtime (e.g. #[tokio::main]).
+    /// This does not create or block a runtime; it awaits the accept loop forever.
+    pub async fn run_async(mut self) {
+        // Ensure we are inside a Tokio runtime
+        let handle = Handle::current();
+
+        // Initialize the user executor first
+        self.proc_executor.init().await;
+
+        // Start workers using the current runtime handle
+        let workers_load = Arc::clone(&self.workers_load);
+        let proc_executor = Arc::clone(&self.proc_executor);
+        for worker_id in 0..self.config.thread {
+            let worker = DefaultWorker::new(
+                handle.clone(),
+                Arc::clone(&proc_executor),
+                Arc::clone(&self.global_queue),
+                Arc::clone(&workers_load),
+                worker_id as u32,
+            );
+            worker.run();
+            self.workers.push(worker);
+            info!("Worker {} started", worker_id);
+        }
+
+        info!(
+            "Server starting on http://{}.{}.{}.{}:{}",
+            self.config.host[0],
+            self.config.host[1],
+            self.config.host[2],
+            self.config.host[3],
+            self.config.port
+        );
+        if self.config.host == [0, 0, 0, 0] || self.config.host[0] == 127 {
+            info!("Server also accessible on http://localhost:{}", self.config.port);
+        }
+
+        // Create the Tokio listener within the runtime context
+        let listener = self.create_configured_listener();
+
+        // Accept loop — never returns
+        loop {
+            match listener.accept().await {
+                Ok((socket, addr)) => {
+                    debug!("Accepted connection from {}", addr);
+                    let connection = TcpConnection::new(socket);
+
+                    let first_idle_worker = self
+                        .workers_load
+                        .iter()
+                        .enumerate()
+                        .find_map(|(worker_id, load)| {
+                            if load.load(Relaxed) == 0 {
+                                Some(worker_id)
+                            } else {
+                                None
+                            }
+                        });
+
+                    if let Some(worker_id) = first_idle_worker {
+                        self.workers[worker_id].execute(connection);
+                    } else {
+                        self.global_queue.push(connection).unwrap_or_else(|_| {
+                            error!(
+                                "Failed to push connection to global queue - queue is full"
+                            );
+                            println!(
+                                "Failed to push connection to global queue - queue is full"
+                            );
+                        });
+                    }
+                }
+                Err(e) => {
+                    error!("Failed to accept connection: {}", e);
+                }
+            }
+        }
+    }
+
     /// Starts the server and begins accepting connections.
     /// 
     /// サーバーを起動し、接続を受け付け始めます。
-    pub fn run(&mut self) {
+    pub fn run(mut self) {
         let workers_load = Arc::clone(&self.workers_load); // Arcをクローン
         let proc_executor = Arc::clone(&self.proc_executor); // Arcをクローン
 
-        let rt = Arc::new(tokio::runtime::Builder::new_multi_thread()
+        // ランタイム本体を保持する（Handleだけにしない）
+        let mut rt_guard: Option<tokio::runtime::Runtime> = None;
+        let handle = match Handle::try_current() {
+            Ok(h) => h,
+            Err(_) => {
+                let rt = tokio::runtime::Builder::new_multi_thread()
                     .worker_threads(self.config.thread)
                     .thread_name(self.config.thread_name.clone())
                     .enable_all()
                     .build()
-                    .expect("Failed to create Tokio runtime"));
+                    .expect("Failed to create Tokio runtime");
+                let h = rt.handle().clone();
+                rt_guard = Some(rt); // Runtime を保持
+                h
+            }
+        };
 
-        rt.spawn(async move {
+        handle.spawn(async move {
             proc_executor.init().await;
         });
 
@@ -487,7 +576,7 @@ where
     
         for worker_id in 0..self.config.thread {
             let worker = DefaultWorker::new(
-                rt.handle().clone(),
+                handle.clone(),
                 Arc::clone(&proc_executor), // クローンしたArcを渡す
                 Arc::clone(&self.global_queue),
                 workers_load.clone(), // クローンしたArcを渡す
@@ -497,13 +586,6 @@ where
             self.workers.push(worker);
             info!("Worker {} started", worker_id);
         }
-
-        let accept_runtime = tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(self.config.accept_threads.unwrap_or(self.config.accept_threads.unwrap_or(1)))
-            .thread_name("kurosabi-accept".to_string())
-            .enable_all()
-            .build()
-            .expect("Failed to create accept runtime");
 
         info!(
             "Server starting on http://{}.{}.{}.{}:{}",
@@ -523,7 +605,9 @@ where
             );
         }
 
-        accept_runtime.block_on(async move {
+        // Runtime ガードを保持したまま block_on
+        let _keep_rt_alive = rt_guard.as_ref();
+        handle.block_on(async move {
             let listener = self.create_configured_listener();
             loop {
                 match listener.accept().await {
@@ -546,7 +630,6 @@ where
                                 println!("Failed to push connection to global queue - queue is full");
                             });
                         }
-      
                     }
                     Err(e) => {
                         error!("Failed to accept connection: {}", e);

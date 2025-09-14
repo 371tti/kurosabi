@@ -1,6 +1,7 @@
 use kurosabi::Kurosabi;
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let mut kurosabi = Kurosabi::new();
 
     kurosabi.get("/", |mut c| async move {
@@ -8,5 +9,5 @@ fn main() {
         c
     });
 
-    kurosabi.server().build().run();
+    kurosabi.server().build().run_async().await;
 }
