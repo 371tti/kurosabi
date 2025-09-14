@@ -9,21 +9,25 @@ use log::{debug, error, info};
 use worker::{Worker};
 use std::sync::atomic::Ordering::Relaxed;
 
-use crate::server::worker::{DefaultWorker, Executor};
+use crate::{context::ContextMiddleware, server::worker::{DefaultWorker, Executor}};
 
-pub struct KurosabiServer<E> 
-where E: Executor + Send + Sync + 'static {
+pub struct KurosabiServer<E, C> 
+where 
+    E: Executor<C> + Send + Sync + 'static,
+    C: Clone + Sync + Send + 'static + ContextMiddleware<C>,
+{
     config: KurosabiConfig,
     global_queue: Arc<ArrayQueue<TcpConnection>>,
     workers_load: Arc<Box<[AtomicU64]>>,
     proc_executor: Arc<E>,
-    workers: Vec<DefaultWorker<E>>,
+    workers: Vec<DefaultWorker<E, C>>,
     _marker: std::marker::PhantomData<E>, // Added PhantomData to use E
 }
 
-pub struct KurosabiServerBuilder<E> {
+pub struct KurosabiServerBuilder<E, C> {
     config: KurosabiConfig,
-    prc_executor: Arc<E>,
+    proc_executor: Arc<E>,
+    _marker: std::marker::PhantomData<C>,
 }
 
 /// Configuration for the Kurosabi server.
@@ -149,8 +153,11 @@ pub struct KurosabiConfig {
     accept_threads: Option<usize>,
 }
 
-impl<E> KurosabiServerBuilder<E>
-where E: Executor + Send + Sync + 'static {
+impl<E, C> KurosabiServerBuilder<E, C>
+where
+    E: Executor<C> + Send + Sync + 'static,
+    C: Clone + Sync + Send + 'static + ContextMiddleware<C>,
+{
     /// Creates a new `KurosabiServerBuilder` with default configuration.
     ///
     /// # Arguments
@@ -165,7 +172,7 @@ where E: Executor + Send + Sync + 'static {
     /// * `worker` - ワーカー実装を格納した`Arc`。
     ///
     /// このメソッドは、ビルダーメソッドでカスタマイズ可能なデフォルト設定で初期化します。
-    pub fn new(executor: E) -> KurosabiServerBuilder<E> {
+    pub fn new(executor: E) -> KurosabiServerBuilder<E, C> {
         KurosabiServerBuilder {
             config: KurosabiConfig {
                 host: [127, 0, 0, 1],
@@ -183,7 +190,8 @@ where E: Executor + Send + Sync + 'static {
                 keepalive_interval: Duration::from_secs(10),
                 accept_threads: None,
             },
-            prc_executor: Arc::new(executor),
+            proc_executor: Arc::new(executor),
+            _marker: std::marker::PhantomData,
         }
     }
 
@@ -432,10 +440,10 @@ where E: Executor + Send + Sync + 'static {
     /// 
     /// サーバーをビルドします
     /// 新しいKurosabiServerインスタンスを作成します
-    pub fn build(self) -> KurosabiServer<E> {
+    pub fn build(self) -> KurosabiServer<E, C> {
         let thread_mum = self.config.thread;
         let queue_size = self.config.queue_size;
-        let executor = Arc::clone(&self.prc_executor);
+        let executor = Arc::clone(&self.proc_executor);
         // Create a new KurosabiServer instance with the provided configuration
         KurosabiServer {
             config: self.config,
@@ -452,8 +460,11 @@ where E: Executor + Send + Sync + 'static {
     }
 }
 
-impl<E> KurosabiServer<E> 
-where E: Executor + Send + Sync + 'static {
+impl<E, C> KurosabiServer<E, C> 
+where 
+    E: Executor<C> + Send + Sync + 'static,
+    C: Clone + Sync + Send + 'static + ContextMiddleware<C>,
+{
     /// Starts the server and begins accepting connections.
     /// 
     /// サーバーを起動し、接続を受け付け始めます。
@@ -468,7 +479,11 @@ where E: Executor + Send + Sync + 'static {
                     .build()
                     .expect("Failed to create Tokio runtime"));
 
-                proc_executor.e
+        rt.spawn(async move {
+            proc_executor.init().await;
+        });
+
+        let proc_executor = Arc::clone(&self.proc_executor); // またArcをクローン
     
         for worker_id in 0..self.config.thread {
             let worker = DefaultWorker::new(

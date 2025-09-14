@@ -21,7 +21,7 @@ impl MyContext {
     }
 }
 
-impl ContextMiddleware<Context<MyContext>> for MyContext {}
+impl ContextMiddleware<MyContext> for MyContext {}
 
 /// json api(GET)の実装方法
 /// kurosabiはjson apiをrustのstructで受け取り、送信できます (serdeによる)
@@ -265,9 +265,8 @@ fn main() {
         c
     });
 
-    kurosabi.get("/kill", |mut c| async move {
+    kurosabi.get("/kill", |_| async move {
         panic!("Intentional panic for testing purposes!");
-        c
     });
 
     let mut server = kurosabi.server()

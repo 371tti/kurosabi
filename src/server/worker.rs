@@ -4,28 +4,37 @@ use std::sync::{atomic::AtomicU64, Arc};
 use crossbeam_queue::ArrayQueue;
 use futures::FutureExt;
 use log::{error, warn};
-use tokio::runtime::{Handle, Runtime};
+use tokio::runtime::Handle;
 use tokio::sync::Notify;
+
+use crate::context::ContextMiddleware;
 
 use super::TcpConnection;
 
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::atomic::Ordering::SeqCst;
-pub trait Worker<E>: Send + Sync 
-where E: Executor {
+pub trait Worker<E, C>: Send + Sync
+where
+    E: Executor<C>,
+    C: Clone + Sync + Send + 'static + ContextMiddleware<C>,
+{
     fn new(runtime: Handle, executor: Arc<E>, grobal_queue: Arc<ArrayQueue<TcpConnection>>, workers_load: Arc<Box<[AtomicU64]>>, my_worker_id: u32) -> Self;
     fn execute(&self, connection: TcpConnection);
     fn run(&self);
 }
 
-pub struct DefaultWorker<E>
-where E: Executor {
+pub struct DefaultWorker<E, C>
+where
+    C: Clone + Sync + Send + 'static + ContextMiddleware<C>,
+    E: Executor<C>,
+{
     pub executor: Arc<E>,
     pub runtime: Handle,
     pub notify: Arc<Notify>,
     pub grobal_queue: Arc<ArrayQueue<TcpConnection>>,
     pub workers_load: Arc<Box<[AtomicU64]>>, // Fixed the syntax for Arc<Box<[AtomicU64]>
     pub worker_id: u32,
+    phantom: std::marker::PhantomData<C>,
 }
 
 struct LoadGuard<'a>(&'a AtomicU64);
@@ -43,8 +52,11 @@ impl<'a> Drop for LoadGuard<'a> {
     }
 }
 
-impl<E> Worker<E> for DefaultWorker<E>
-where E: Executor + Send + Sync + 'static {
+impl<E, C> Worker<E, C> for DefaultWorker<E, C>
+where 
+    C: Clone + Sync + Send + 'static + ContextMiddleware<C>,
+    E: Executor<C> + Send + Sync + 'static,
+{
     fn new(runtime: Handle, executor: Arc<E>, grobal_queue: Arc<ArrayQueue<TcpConnection>>, workers_load: Arc<Box<[AtomicU64]>>, worker_id: u32) -> Self {
         DefaultWorker {
             runtime: runtime,
@@ -53,6 +65,7 @@ where E: Executor + Send + Sync + 'static {
             grobal_queue,
             workers_load,
             worker_id,
+            phantom: std::marker::PhantomData,
         }
     }
 
@@ -120,6 +133,8 @@ where E: Executor + Send + Sync + 'static {
 }
 
 #[async_trait::async_trait]
-pub trait Executor: Send + Sync {
+pub trait Executor<C>: Send + Sync
+where C: Clone + Sync + Send + 'static + ContextMiddleware<C> {
     async fn execute(&self, connection: TcpConnection);
+    async fn init(&self);
 }

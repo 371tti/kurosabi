@@ -27,7 +27,7 @@ impl Kurosabi<DefaultContext, DefaultRouter<DefaultContext>> {
 
 impl<C> Kurosabi<C, DefaultRouter<C>>
 where
-    C: Clone + Sync + Send + 'static + ContextMiddleware<Context<C>>,
+    C: Clone + Sync + Send + 'static + ContextMiddleware<C>,
 {
     /// コンテキストを指定して初期化する
     pub fn with_context(context: C) -> Kurosabi<C, DefaultRouter<C>> {
@@ -40,7 +40,7 @@ where
 
 impl<C, R> Kurosabi<C, R>
 where
-    C: Clone + Sync + Send + 'static + ContextMiddleware<Context<C>>,
+    C: Clone + Sync + Send + 'static + ContextMiddleware<C>,
     R: GenRouter<Arc<BoxedHandler<C>>> + 'static,
 {
     /// コンテキストとルーターを指定して初期化する
@@ -215,7 +215,7 @@ where
     }
     
     /// ルーターをビルドしてサーバーを生成する
-    pub fn server(mut self) -> KurosabiServerBuilder<DefaultWorker<C, R>> {
+    pub fn server(mut self) -> KurosabiServerBuilder<DefaultWorker<C, R>, C> {
         self.router.build();
         let worker = DefaultWorker::new(Arc::new(self.router), Arc::new(self.context));
         KurosabiServerBuilder::new(worker)
@@ -251,9 +251,9 @@ pub struct Context<C> {
 }
 
 #[async_trait::async_trait]
-impl<C, R> Executor for DefaultWorker<C, R>
+impl<C, R> Executor<C> for DefaultWorker<C, R>
     where
-    C: Clone + Sync + Send + 'static + ContextMiddleware<Context<C>>,
+    C: Clone + Sync + Send + 'static + ContextMiddleware<C>,
     R: GenRouter<Arc<BoxedHandler<C>>>,
 {
     async fn execute(&self, connection: TcpConnection) {
@@ -351,6 +351,11 @@ impl<C, R> Executor for DefaultWorker<C, R>
             }
         }
         // すべてのリクエスト処理後、接続をクローズ
+    }
+
+    async fn init(&self)  {
+        let context_data: C = (*self.context).clone();
+        C::init(context_data).await;
     }
 }
 
