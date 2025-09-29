@@ -1,5 +1,7 @@
+use std::time::Duration;
 use std::{pin::Pin, sync::Arc};
 use log::{debug, error, info, warn};
+use tokio::time::timeout;
 
 use crate::api::{GETJsonAPI, POSTJsonAPI};
 use crate::context::ContextMiddleware;
@@ -259,12 +261,24 @@ impl<C, R> Executor<C> for DefaultWorker<C, R>
     async fn execute(&self, connection: TcpConnection) {
         // Req は内部に TCP 接続を保持つ
         let mut req = Req::new(connection);
+
+        let idle_timeout = Duration::from_secs(60); // 60秒のアイドルタイムアウト
         
         loop {
             // 新しいリクエストが来るまで待機
-            if let Err(e) = req.wait_request().await {
-                error!("Failed to wait for request: {:?}", e);
-                break;
+            // タイムアウト付きで待機
+            match timeout(idle_timeout, req.wait_request()).await {
+                Ok(Ok(())) => {
+                    // 続行
+                }
+                Ok(Err(e)) => {
+                    error!("Failed to wait for request: {:?}", e);
+                    break;
+                }
+                Err(_) => {
+                    debug!("Keep-Alive idle timeout -> closing connection");
+                    break;
+                }
             }
             // リクエストのタイミングを計測
             let rev_to_res_time = std::time::Instant::now();
@@ -302,6 +316,23 @@ impl<C, R> Executor<C> for DefaultWorker<C, R>
 
                 // ミドルウェアの後処理
                 context = C::after_handle(context).await;
+                
+                // 接続ヘッダの自動設定
+                if context.res.header.get("Connection").is_none() {
+                    let req_conn_close = context.req
+                        .header
+                        .get_connection()
+                        .map(|v| v.eq_ignore_ascii_case("close"))
+                        .unwrap_or(false);
+                    if req_conn_close {
+                        context.res.header.set("Connection", "close");
+                    } else if context.req.version == "HTTP/1.1" {
+                        context.res.header.set("Connection", "keep-alive");
+                        context.res.header.set("Keep-Alive", "timeout=60");
+                    } else {
+                        context.res.header.set("Connection", "close");
+                    }
+                }
 
                 let ps_time = ps_time.elapsed();
 
@@ -362,13 +393,26 @@ impl<C, R> Executor<C> for DefaultWorker<C, R>
 /// 接続を閉じるか判断するための例
 #[inline]
 fn should_close_connection(req: &Req, res: &Res) -> bool {
-    // HTTP/1.0の場合、明示的なKeep-Aliveがなければclose
-    if req.version == "HTTP/1.0" && !req.header.get_connection().unwrap_or("close").eq_ignore_ascii_case("keep-alive") {
-        return true;
+    // リクエスト側が close 明示
+    if let Some(c) = req.header.get_connection() {
+        if c.eq_ignore_ascii_case("close") {
+            return true;
+        }
     }
-    // レスポンスで "Connection: close" が指定されている場合
-    if res.header.get("Connection").unwrap_or("close").eq_ignore_ascii_case("close") {
-        return true;
+    // レスポンス側が close 明示
+    if let Some(c) = res.header.get("Connection") {
+        if c.eq_ignore_ascii_case("close") {
+            return true;
+        }
     }
+    // HTTP/1.0 は明示 keep-alive 無しなら切断
+    if req.version == "HTTP/1.0" {
+        return !req
+            .header
+            .get_connection()
+            .map(|v| v.eq_ignore_ascii_case("keep-alive"))
+            .unwrap_or(false);
+    }
+    // HTTP/1.1 既定は持続
     false
 }
