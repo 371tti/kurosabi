@@ -1,4 +1,4 @@
-use kurosabi::Kurosabi;
+use kurosabi::{response::body::CompressionConfig, Kurosabi};
 
 #[tokio::main]
 async fn main() {
@@ -6,6 +6,7 @@ async fn main() {
 
     kurosabi.get("/", |mut c| async move {
         c.res.text("hello, kurosabi!");
+        c.res.compress_config = CompressionConfig::Hi;
         c
     });
 

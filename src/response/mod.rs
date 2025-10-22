@@ -89,7 +89,6 @@ impl Res {
 
     #[inline]
     pub async fn flush(mut self, req: &mut Req) -> Result<(), KurosabiError> {
-        self.header.set("Server", "Kurosabi");
         let compression = self.decide_compression(req);
         self.body.compress(&mut self.header, compression).await;
         let writer = req.connection.writer();
