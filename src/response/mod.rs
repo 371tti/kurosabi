@@ -92,6 +92,7 @@ impl Res {
         let compression = self.decide_compression(req);
         self.body.compress(&mut self.header, compression).await;
         let writer = req.connection.writer();
+        // ヘッダを書き込む
         writer.write_all(format!("HTTP/1.1 {}\r\n", self.code).as_bytes()).await.map_err(|e| KurosabiError::IoError(e))?;
         for (key, value) in &self.header.headers {
             writer.write_all(format!("{}: {}\r\n", key, value).as_bytes()).await.map_err(|e| KurosabiError::IoError(e))?;
@@ -99,7 +100,9 @@ impl Res {
         writer.write_all(b"\r\n").await.map_err(|e| KurosabiError::IoError(e))?;
         writer.flush().await.map_err(|e| KurosabiError::IoError(e))?;
 
-        self.body.compress_to_stream(Compression::NotCompressed, writer).await?;
+        // データ書き込む
+        // Context Length わからないので現状圧縮しない
+        self.body.write_with_compression(Compression::NotCompressed, writer).await?;
 
         writer.flush().await.map_err(|e| KurosabiError::IoError(e))?;
         Ok(())

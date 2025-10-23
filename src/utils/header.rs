@@ -30,6 +30,19 @@ impl Header {
         self.headers.retain(|(k, _)| k.to_ascii_uppercase() != key);
     }
 
+    /// 1つ目に一致したヘッダーを置き換える または追加する
+    #[inline]
+    pub fn replace(&mut self, key: &str, value: &str) {
+        let key_upper = key.to_ascii_uppercase();
+        for (k, v) in &mut self.headers {
+            if k.to_ascii_uppercase() == key_upper {
+                *v = value.to_string();
+                return;
+            }
+        }
+        self.headers.push((key_upper, value.to_string()));
+    }
+
     #[inline]
     pub fn clear(&mut self) {
         self.headers.clear();

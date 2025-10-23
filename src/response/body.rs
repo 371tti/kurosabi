@@ -5,7 +5,7 @@ use mime_guess::from_path;
 use tokio::{fs::File, io::{AsyncRead, AsyncReadExt, AsyncSeekExt, AsyncWriteExt, BufWriter}, net::tcp::OwnedWriteHalf};
 use tokio_util::io::ReaderStream;
 
-use crate::{error::{HttpError, KurosabiError}, request::Req, utils::header::Header};
+use crate::{error::{HttpError, KurosabiError}, kurosabi::Context, request::Req, utils::header::Header};
 
 use super::Res;
 
@@ -14,7 +14,7 @@ impl Res {
     /// テキストレスポンス
     #[inline]
     pub fn text(&mut self, text: &str) -> &mut Self {
-        self.header.set("Content-Type", "text/plain");
+        self.header.set("Content-Type", "text/plain; charset=utf-8");
         self.header.set("Content-Length", &text.len().to_string());
         self.body = Body::Text(text.to_string());
         self
@@ -102,10 +102,20 @@ impl Res {
     }
 
     /// ストリームレスポンス
-    /// ストリームレスポンスは、AsyncReadを実装したストリームを指定する
+    /// AsyncReadを実装したストリームを渡してね
+    /// Content-Length ヘッダを指定してください じゃないとHTTPの仕様上エラー
     #[inline]
     pub fn stream(&mut self, stream: Pin<Box<dyn AsyncRead + Send + Sync>>, buffer_size: usize) -> &mut Self {
         self.body = Body::Stream(stream, buffer_size);
+        self
+    }
+
+    /// チャンクドストリームレスポンス
+    /// AsyncReadを実装したストリームを渡してね
+    /// Content-Length ヘッダはいらないよ Transfer-Encoding: chunked が使用されます
+    #[inline]
+    pub fn chunked_stream(&mut self, stream: Pin<Box<dyn AsyncRead + Send + Sync>>, buffer_size: usize) -> &mut Self {
+        self.body = Body::ChunkedStream(stream, buffer_size);
         self
     }
 
@@ -113,13 +123,12 @@ impl Res {
     ///
     /// * `path` … 返したいファイル
     /// * Range ヘッダ対応（`bytes=start-end` / `start-` / `-suffix` すべてOK）
-    pub async fn file<P: AsRef<Path>>(
-        &mut self,
-        req: &Req,
+    pub async fn file<P: AsRef<Path>, C>(
+        mut context: Context<C>,
         path: P,
         inline: bool,
         file_name: Option<&str>
-    ) -> Result<(), HttpError> {
+    ) -> Result<Context<C>, HttpError> {
         const DEFAULT_BUFFER_SIZE: usize = 16384; // デフォルトのバッファサイズ
         let path = path.as_ref();
 
@@ -137,16 +146,16 @@ impl Res {
         let mime = from_path(path);
         let mime_type = mime.first_or_octet_stream();
         let ctype = mime_type.essence_str();
-        self.header.set("Content-Type", ctype);
+        context.res.header.set("Content-Type", ctype);
 
         /* ---------- Content-Disposition -------------- */
         if let Some(fname) = file_name.or(path.file_name().and_then(OsStr::to_str)) {
-            self.header
+            context.res.header
                 .set("Content-Disposition", &format!("{}; filename=\"{}\"", if inline { "inline" } else { "attachment" }, fname));
         }
 
         /* ---------- Range 解析 ----------------------- */
-        if let Some(range_raw) = req.header.get("Range") {
+        if let Some(range_raw) = context.req.header.get("Range") {
             // bytes=START-END / START- / -SUFFIX
             let err = || HttpError::BadRequest("Invalid Range".into());
             let bytes_part = range_raw
@@ -182,23 +191,23 @@ impl Res {
             file.seek(SeekFrom::Start(start))
                 .await
                 .map_err(|_| HttpError::InternalServerError("seek failed".into()))?;
-            self.body = Body::Stream(Box::pin(file.take(len)), DEFAULT_BUFFER_SIZE);
-            self.code = 206; // Partial Content
-            self.header.set("Content-Length", &len.to_string());
-            self.header
+            context.res.body = Body::Stream(Box::pin(file.take(len)), DEFAULT_BUFFER_SIZE);
+            context.res.code = 206; // Partial Content
+            context.res.header.set("Content-Length", &len.to_string());
+            context.res.header
                 .set("Content-Range", &format!("bytes {}-{}/{}", start, end, size));
         } else {
             /* ---- 全量転送 (ReaderStream) ---------------- */
             let stream = ReaderStream::new(file);
             let stream_reader = tokio_util::io::StreamReader::new(stream);
-            self.body = Body::Stream(Box::pin(stream_reader), DEFAULT_BUFFER_SIZE);
-            self.header.set("Content-Length", &size.to_string());
+            context.res.body = Body::Stream(Box::pin(stream_reader), DEFAULT_BUFFER_SIZE);
+            context.res.header.set("Content-Length", &size.to_string());
         }
 
 
-        self.header.set("Accept-Ranges", "bytes");
+        context.res.header.set("Accept-Ranges", "bytes");
 
-        Ok(())
+        Ok(context)
     }
 }
 
@@ -207,6 +216,7 @@ pub enum Body {
     Text(String),
     Binary(Vec<u8>),
     Stream(Pin<Box<dyn AsyncRead + Send + Sync>>, usize),
+    ChunkedStream(Pin<Box<dyn AsyncRead + Send + Sync>>, usize),
 }
 
 pub enum CompressionConfig {
@@ -226,6 +236,7 @@ pub enum Compression {
 }
 
 impl Body {
+    /// 圧縮率自動判定中
     #[inline]
     pub fn size(&self) -> usize {
         match self {
@@ -237,9 +248,15 @@ impl Body {
                 // ここでは0を返す -> 非圧縮
                 0
             },
+            Body::ChunkedStream(_stream, _buffer_size) => {
+                // ストリームのサイズは不明
+                // ここでは0を返す -> 非圧縮
+                0
+            }
         }
     }
 
+    /// 圧縮を行う
     #[inline]
     pub async fn compress(
         &mut self,
@@ -273,8 +290,7 @@ impl Body {
                         encoder.shutdown().await.ok();
                         let compressed = encoder.into_inner();
                         header.set("Content-Encoding", "br");
-                        header.del("Content-Length");
-                        header.set("Content-Length", &compressed.len().to_string());
+                        header.replace("Content-Length", &compressed.len().to_string());
                         header.set("X-Compression", &level.to_string());
                         *self = Body::Binary(compressed);
                     }
@@ -283,20 +299,40 @@ impl Body {
                         encoder.shutdown().await.ok();
                         let compressed = encoder.into_inner();
                         header.set("Content-Encoding", "br");
-                        header.del("Content-Length");
-                        header.set("Content-Length", &compressed.len().to_string());
+                        header.replace("Content-Length", &compressed.len().to_string());
                         header.set("X-Compression", &level.to_string());
                         *self = Body::Binary(compressed);
                     }
-                    _ => {}
+                    _ => {
+                        // empty stream chunkedstream は圧縮できない
+                    }
                 }
             }
-            _ => { }
+            Compression::NotCompressed => {
+                // 圧縮しない場合は何もしない
+            }
         }
     }
 
+    /// デフォルトヘッダを書き込む ないとエラーになる系
     #[inline]
-    pub async fn compress_to_stream(
+    pub async fn write_default_headers(&self, header: &mut Header) {
+        match self {
+            Body::ChunkedStream(_, _) => {
+                header.set("Transfer-Encoding", "chunked");
+            }
+            Body::Empty => {
+                header.set("Content-Length", "0");
+            }
+            _ => {
+                // 他は特に何もしないでいいと思う？
+            }
+        }
+    }
+
+    /// 書き込みと圧縮を同時に行う
+    #[inline]
+    pub async fn write_with_compression(
         self,
         encoding: Compression,
         writer: &mut BufWriter<OwnedWriteHalf>,
@@ -323,9 +359,28 @@ impl Body {
                             writer.write_all(&buffer[..n]).await.map_err(|e| KurosabiError::IoError(e))?;
                             writer.flush().await.map_err(|e| KurosabiError::IoError(e))?;
                         }
-                    }
+                    },
+                    Body::ChunkedStream(mut stream, buffer_size) => {
+                        let mut buffer = vec![0; buffer_size]; // Use a buffer of the specified size
+                        let writer = writer.get_mut();
+                        loop {
+                            let n = stream.read(&mut buffer).await.map_err(|e| KurosabiError::IoError(e))?;
+                            if n == 0 {
+                                break; // ストリームの終端
+                            }
+                            // チャンクサイズを書き込む
+                            let size_line = format!("{:X}\r\n", n);
+                            writer.write_all(size_line.as_bytes()).await.map_err(|e| KurosabiError::IoError(e))?;
+                            // データを書き込む
+                            writer.write_all(&buffer[..n]).await.map_err(|e| KurosabiError::IoError(e))?;
+                            writer.write_all(b"\r\n").await.map_err(|e| KurosabiError::IoError(e))?;
+                            writer.flush().await.map_err(|e| KurosabiError::IoError(e))?;
+                        }
+                        // 最後のチャンクを書き込む
+                        writer.write_all(b"0\r\n\r\n").await.map_err(|e| KurosabiError::IoError(e))?;
+                    },
                     Body::Empty => {
-                        // 空のボディの場合は何もしない
+                        // 何もないのでなにもしない
                     }
                 }
                 Ok(())
