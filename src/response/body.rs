@@ -5,7 +5,7 @@ use mime_guess::from_path;
 use tokio::{fs::File, io::{AsyncRead, AsyncReadExt, AsyncSeekExt, AsyncWriteExt, BufWriter}, net::tcp::OwnedWriteHalf};
 use tokio_util::io::ReaderStream;
 
-use crate::{error::{HttpError, KurosabiError}, kurosabi::Context, request::Req, utils::header::Header};
+use crate::{error::{HttpError, KurosabiError}, kurosabi::Context, utils::header::Header};
 
 use super::Res;
 
@@ -366,6 +366,8 @@ impl Body {
                         loop {
                             let n = stream.read(&mut buffer).await.map_err(|e| KurosabiError::IoError(e))?;
                             if n == 0 {
+                                writer.write_all(b"0\r\n\r\n").await.map_err(|e| KurosabiError::IoError(e))?;
+                                writer.flush().await.map_err(|e| KurosabiError::IoError(e))?;
                                 break; // ストリームの終端
                             }
                             // チャンクサイズを書き込む
@@ -377,7 +379,6 @@ impl Body {
                             writer.flush().await.map_err(|e| KurosabiError::IoError(e))?;
                         }
                         // 最後のチャンクを書き込む
-                        writer.write_all(b"0\r\n\r\n").await.map_err(|e| KurosabiError::IoError(e))?;
                     },
                     Body::Empty => {
                         // 何もないのでなにもしない

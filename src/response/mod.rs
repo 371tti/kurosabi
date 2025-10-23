@@ -91,6 +91,7 @@ impl Res {
     pub async fn flush(mut self, req: &mut Req) -> Result<(), KurosabiError> {
         let compression = self.decide_compression(req);
         self.body.compress(&mut self.header, compression).await;
+        self.body.write_default_headers(&mut self.header).await;
         let writer = req.connection.writer();
         // ヘッダを書き込む
         writer.write_all(format!("HTTP/1.1 {}\r\n", self.code).as_bytes()).await.map_err(|e| KurosabiError::IoError(e))?;

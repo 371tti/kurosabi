@@ -2,5 +2,7 @@
     "cSpell.words": [
         "Kurosabi"
     ],
-    "jpLsp.applyAllLanguages": false
+    "jpLsp.applyAllLanguages": false,
+    "jpLsp.semantic.enable": false,
+    "jpLsp.wikipedia.enable": false
 }
