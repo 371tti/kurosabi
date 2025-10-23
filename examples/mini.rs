@@ -51,7 +51,6 @@ fn main() {
     });
 
     kurosabi.not_found_handler(|mut c| async move {
-        c.res.text("404");
         c.res.set_status(404);
         c
     });
