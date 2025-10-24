@@ -118,10 +118,17 @@ where
                     }
         
                     // タスクキューからコネクションを取り出して処理する
-                    let executor_clone = Arc::clone(&executor); // 非同期タスク内でクローン
                     if let Some(connection) = grobal_queue.pop() {
+                        let cloned_workers_load = Arc::clone(&workers_load);
+                        let executor_clone = Arc::clone(&executor);
                         rt.spawn(async move {
-                            executor_clone.execute(connection).await;
+                            let _guard = LoadGuard::new(&cloned_workers_load[worker_id as usize]);
+                            let res = AssertUnwindSafe(executor_clone.execute(connection))
+                                .catch_unwind()
+                                .await;
+                            if let Err(panic_info) = res {
+                                error!("{:?} {}", panic_info, "handler panicked — connection closed");
+                            }
                         });
                     } else {
                         warn!("Failed to pop connection from global queue");

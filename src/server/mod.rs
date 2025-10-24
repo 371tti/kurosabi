@@ -18,6 +18,7 @@ where
 {
     config: KurosabiConfig,
     global_queue: Arc<ArrayQueue<TcpConnection>>,
+    /// 論理ワーカーのタスク数
     workers_load: Arc<Box<[AtomicU64]>>,
     proc_executor: Arc<E>,
     workers: Arc<Vec<DefaultWorker<E, C>>>,
@@ -149,8 +150,8 @@ pub struct KurosabiConfig {
     ///
     /// 最初の送信以降、Keep-Aliveパケットを送信する間隔を指定します。
     tcp_keepalive_interval: Duration,
-    /// 接続受け入れスレッド数。デフォルトは1
-    accept_threads: usize,
+    // 接続受け入れスレッド数。デフォルトは1
+    // accept_threads: usize,
 }
 
 impl<E, C> KurosabiServerBuilder<E, C>
@@ -188,7 +189,7 @@ where
                 tcp_keepalive_enabled: true,
                 tcp_keepalive_time: Duration::from_secs(30),
                 tcp_keepalive_interval: Duration::from_secs(10),
-                accept_threads: 1,
+                // accept_threads: 1,
             },
             proc_executor: Arc::new(executor),
             _marker: std::marker::PhantomData,
@@ -428,11 +429,11 @@ where
         self
     }
 
-    /// Sets the number of accept threads.
-    pub fn accept_threads(mut self, count: usize) -> Self {
-        self.config.accept_threads = count;
-        self
-    }
+    // /// Sets the number of accept threads.
+    // pub fn accept_threads(mut self, count: usize) -> Self {
+    //     self.config.accept_threads = count;
+    //     self
+    // }
 
     /// build server
     /// new KurosabiServer instance
@@ -474,16 +475,13 @@ where
         self.proc_executor.init().await;
 
         // Start workers using the current runtime handle
-        let workers_load = Arc::clone(&self.workers_load);
-        let proc_executor = Arc::clone(&self.proc_executor);
-        let thread_mum = self.config.thread;
-        let mut workers = Vec::with_capacity(thread_mum);
+        let mut workers = Vec::with_capacity(self.config.thread);
         for worker_id in 0..self.config.thread {
             let worker = DefaultWorker::new(
                 handle.clone(),
-                Arc::clone(&proc_executor),
+                Arc::clone(&self.proc_executor),
                 Arc::clone(&self.global_queue),
-                Arc::clone(&workers_load),
+                Arc::clone(&self.workers_load),
                 worker_id as u32,
             );
             worker.run();
@@ -505,159 +503,54 @@ where
             info!("Server also accessible on http://localhost:{}", self.config.port);
         }
 
-        for accept_thread_id in 0..self.config.accept_threads {
-            // Create the Tokio listener within the runtime context
-            let listener = self.create_configured_listener();
-            let global_queue = Arc::clone(&self.global_queue);
-            let workers_load = Arc::clone(&self.workers_load);
-            let workers = Arc::clone(&self.workers); 
-            handle.spawn(async move {
-                // Accept loop — never returns
-                loop {
-                    match listener.accept().await {
-                        Ok((socket, addr)) => {
-                            debug!("Accepted connection from {}", addr);
-                            let connection = TcpConnection::new(socket);
+        let listener = self.create_configured_listener();
+        // Accept loop — never returns
+        loop {
+            match listener.accept().await {
+                Ok((socket, addr)) => {
+                    debug!("Accepted connection from {}", addr);
+                    let connection = TcpConnection::new(socket);
 
-                            let first_idle_worker = workers_load
-                                .iter()
-                                .enumerate()
-                                .find_map(|(worker_id, load)| {
-                                    if load.load(Relaxed) == 0 {
-                                        Some(worker_id)
-                                    } else {
-                                        None
-                                    }
-                                });
-
-                            if let Some(worker_id) = first_idle_worker {
-                                workers[worker_id].execute(connection);
+                    let first_idle_worker = self.workers_load
+                        .iter()
+                        .enumerate()
+                        .find_map(|(worker_id, load)| {
+                            if load.load(Relaxed) == 0 {
+                                Some(worker_id)
                             } else {
-                                global_queue.push(connection).unwrap_or_else(|_| {
-                                    error!(
-                                        "Failed to push connection to global queue - queue is full"
-                                    );
-                                    println!(
-                                        "Failed to push connection to global queue - queue is full"
-                                    );
-                                });
+                                None
                             }
-                        }
-                        Err(e) => {
-                            error!("Failed to accept connection: {}", e);
-                        }
+                        });
+
+                    if let Some(worker_id) = first_idle_worker {
+                        self.workers[worker_id].execute(connection);
+                    } else {
+                        self.global_queue.push(connection).unwrap_or_else(|_| {
+                            error!(
+                                "Failed to push connection to global queue - queue is full"
+                            );
+                        });
                     }
                 }
-            });
-            info!("Accept thread {} started", accept_thread_id);
+                Err(e) => {
+                    error!("Failed to accept connection: {}", e);
+                }
+            }
         }
-        // Await forever to keep the server running
-        std::future::pending::<()>().await;
     }
 
     /// Starts the server and begins accepting connections.
     /// 
     /// サーバーを起動し、接続を受け付け始めます。
-    pub fn run(mut self) {
-        let workers_load = Arc::clone(&self.workers_load); // Arcをクローン
-        let proc_executor = Arc::clone(&self.proc_executor); // Arcをクローン
-
-        let handle = match Handle::try_current() {
-            Ok(h) => h,
-            Err(_) => {
-                let rt = tokio::runtime::Builder::new_multi_thread()
-                    .worker_threads(self.config.thread)
-                    .thread_name(self.config.thread_name.clone())
-                    .enable_all()
-                    .build()
-                    .expect("Failed to create Tokio runtime");
-                info!("Created new Tokio runtime");
-                return rt.block_on(self.run_async());
-            }
-        };
-
-        handle.spawn(async move {
-            proc_executor.init().await;
-        });
-
-        let proc_executor = Arc::clone(&self.proc_executor); // またArcをクローン
-    
-        let mut workers = Vec::with_capacity(self.config.thread);
-        for worker_id in 0..self.config.thread {
-            let worker = DefaultWorker::new(
-                handle.clone(),
-                Arc::clone(&proc_executor), // クローンしたArcを渡す
-                Arc::clone(&self.global_queue),
-                workers_load.clone(), // クローンしたArcを渡す
-                worker_id as u32, // worker_id
-            );
-            worker.run();
-            workers.push(worker);
-            info!("Worker {} started", worker_id);
-        }
-        self.workers = Arc::new(workers);
-
-        info!(
-            "Server starting on http://{}.{}.{}.{}:{}",
-            self.config.host[0],
-            self.config.host[1],
-            self.config.host[2],
-            self.config.host[3],
-            self.config.port
-        );
-        // Show localhost URL if host is 0.0.0.0 or 127.x.x.x
-        if self.config.host == [0, 0, 0, 0]
-            || self.config.host[0] == 127
-        {
-            info!(
-            "Server also accessible on http://localhost:{}",
-            self.config.port
-            );
-        }
-
-        for accept_thread_id in 0..self.config.accept_threads {
-            // Create the Tokio listener within the runtime context
-            let listener = self.create_configured_listener();
-            let global_queue = Arc::clone(&self.global_queue);
-            let workers_load = Arc::clone(&self.workers_load);
-            let workers = Arc::clone(&self.workers); 
-            handle.spawn(async move {
-                // Accept loop — never returns
-                loop {
-                    match listener.accept().await {
-                        Ok((socket, addr)) => {
-                            debug!("Accepted connection from {}", addr);
-                            let connection = TcpConnection::new(socket);
-
-                            let first_idle_worker = workers_load
-                                .iter()
-                                .enumerate()
-                                .find_map(|(worker_id, load)| {
-                                    if load.load(Relaxed) == 0 {
-                                        Some(worker_id)
-                                    } else {
-                                        None
-                                    }
-                                });
-
-                            if let Some(worker_id) = first_idle_worker {
-                                workers[worker_id].execute(connection);
-                            } else {
-                                global_queue.push(connection).unwrap_or_else(|_| {
-                                    error!(
-                                        "Failed to push connection to global queue - queue is full"
-                                    );
-                                });
-                            }
-                        }
-                        Err(e) => {
-                            error!("Failed to accept connection: {}", e);
-                        }
-                    }
-                }
-            });
-            info!("Accept thread {} started", accept_thread_id);
-        }
+    pub fn run(self) {
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(self.config.thread)
+            .thread_name(self.config.thread_name.clone())
+            .enable_all()
+            .build()
+            .expect("Failed to create Tokio runtime");
+        info!("Created new Tokio runtime");
+        return rt.block_on(self.run_async());
     }
 
     fn create_configured_listener(&self) -> TcpListener {
@@ -666,8 +559,6 @@ where
         socket.set_reuse_address(self.config.reuse_address).unwrap();
         socket.set_tcp_nodelay(self.config.nodelay).unwrap();
 
-
-
         socket.bind(&addr.into()).unwrap();
         socket.set_reuse_address(self.config.reuse_address).unwrap();
 
@@ -675,12 +566,12 @@ where
         socket.set_recv_buffer_size(self.config.recv_buffer_size).unwrap(); // 受信バッファを設定
 
         if self.config.tcp_keepalive_enabled {
+            socket.set_keepalive(true).unwrap();
             socket.set_tcp_keepalive(
                 &TcpKeepalive::new()
                     .with_time(self.config.tcp_keepalive_time) // 最初のKeep-Alive送信までの時間
                     .with_interval(self.config.tcp_keepalive_interval) // Keep-Aliveパケットの間隔
             ).unwrap();
-            socket.set_keepalive(true).unwrap();
         }
         socket.listen(self.config.backlog as i32).unwrap();
         let listener = tokio::net::TcpListener::from_std(socket.into()).unwrap();

@@ -1,27 +1,15 @@
 use std::time::Duration;
 
-use kurosabi::{response::{body::CompressionConfig, Res}, Kurosabi};
+use kurosabi::{response::Res, Kurosabi};
 use tokio::{io::{duplex, AsyncWriteExt}, time::sleep};
 
-fn main() {
+#[tokio::main]
+async fn main() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("debug")).init();
     let mut kurosabi = Kurosabi::new();
 
-    kurosabi.get("/hi", |mut c| async move {
-        c.res.text("hello, kurosabi! 錆を炎であぶるhello, kurosabi! 錆を炎であぶるhello, kurosabi! 錆を炎であぶるhello, kurosabi! 錆を炎であぶるhello, kurosabi! 錆を炎であぶるhello, kurosabi! 錆を炎であぶる");
-        c.res.compress_config = CompressionConfig::Hi;
-        c
-    });
-
-    kurosabi.get("/low", |mut c| async move {
-        c.res.text("hello, kurosabi! 錆を炎であぶるhello, kurosabi! 錆を炎であぶるhello, kurosabi! 錆を炎であぶるhello, kurosabi! 錆を炎であぶるhello, kurosabi! 錆を炎であぶるhello, kurosabi! 錆を炎であぶる");
-        c.res.compress_config = CompressionConfig::None;
-        c
-    });
-
-    kurosabi.get("/opt", |mut c| async move {
-        c.res.text("hello, kurosabi! 錆を炎であぶるhello, kurosabi! 錆を炎であぶるhello, kurosabi! 錆を炎であぶるhello, kurosabi! 錆を炎であぶるhello, kurosabi! 錆を炎であぶるhello, kurosabi! 錆を炎であぶる");
-        c.res.compress_config = CompressionConfig::Optimal;
+    kurosabi.get("/", |mut c| async move {
+        c.res.text("hello");
         c
     });
 
@@ -63,5 +51,7 @@ fn main() {
 
     kurosabi.server()
         .nodelay(true)
-        .build().run();
+        .host([0, 0, 0, 0])
+        .port(85)
+        .build().run_async().await;
 }

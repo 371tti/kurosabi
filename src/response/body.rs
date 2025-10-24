@@ -241,7 +241,7 @@ impl Body {
     pub fn size(&self) -> usize {
         match self {
             Body::Empty => 0,
-            Body::Text(text) => text.len(),
+            Body::Text(text) => text.as_bytes().len(),
             Body::Binary(data) => data.len(),
             Body::Stream(_stream, _buffer_size) => {
                 // ストリームのサイズは不明
