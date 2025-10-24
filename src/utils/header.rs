@@ -31,6 +31,7 @@ impl Header {
     }
 
     /// 1つ目に一致したヘッダーを置き換える または追加する
+    /// delしてからsetするより効率的
     #[inline]
     pub fn replace(&mut self, key: &str, value: &str) {
         let key_upper = key.to_ascii_uppercase();

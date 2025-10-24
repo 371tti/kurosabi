@@ -9,26 +9,28 @@ use log::{debug, error, info};
 use worker::{Worker};
 use std::sync::atomic::Ordering::Relaxed;
 
-use crate::{context::ContextMiddleware, server::worker::{DefaultWorker, Executor}};
+use crate::{context::ContextMiddleware, kurosabi::{self}, router::{BoxedHandler, GenRouter}, server::worker::Executor};
 
-pub struct KurosabiServer<E, C> 
+pub struct KurosabiServer<R, C> 
 where 
-    E: Executor<C> + Send + Sync + 'static,
+    R: GenRouter<Arc<BoxedHandler<C>>> + 'static,
     C: Clone + Sync + Send + 'static + ContextMiddleware<C>,
 {
-    config: KurosabiConfig,
+    config: Arc<KurosabiConfig>,
     global_queue: Arc<ArrayQueue<TcpConnection>>,
     /// 論理ワーカーのタスク数
     workers_load: Arc<Box<[AtomicU64]>>,
-    proc_executor: Arc<E>,
-    workers: Arc<Vec<DefaultWorker<E, C>>>,
-    _marker: std::marker::PhantomData<E>, // Added PhantomData to use E
+    proc_executor: Arc<kurosabi::DefaultWorker<C, R>>,
+    workers: Arc<Vec<worker::DefaultWorker<kurosabi::DefaultWorker<C, R>, C>>>,
 }
 
-pub struct KurosabiServerBuilder<E, C> {
-    config: KurosabiConfig,
-    proc_executor: Arc<E>,
-    _marker: std::marker::PhantomData<C>,
+pub struct KurosabiServerBuilder<R, C> 
+where 
+    C: Clone + Sync + Send + 'static + ContextMiddleware<C>,
+    R: GenRouter<Arc<BoxedHandler<C>>> + 'static {
+    pub config: KurosabiConfig,
+    pub context: C,
+    pub router: R,
 }
 
 /// Configuration for the Kurosabi server.
@@ -53,7 +55,7 @@ pub struct KurosabiConfig {
     ///
     /// サーバーがバインドするアドレスを指定します。例: `[127, 0, 0, 1]`はローカルホスト、
     /// `[0, 0, 0, 0]`は全てのネットワークインターフェースにバインドします。
-    host: [u8; 4],
+    pub host: [u8; 4],
     /// The port number the server will listen on.
     ///
     /// This determines the port where the server will accept incoming connections.
@@ -61,7 +63,7 @@ pub struct KurosabiConfig {
     /// サーバーがリッスンするポート番号。
     ///
     /// サーバーが接続を受け付けるポートを指定します。
-    port: u16,
+    pub port: u16,
     /// The number of threads to use for the server.
     ///
     /// This controls the number of worker threads that will handle incoming requests.
@@ -69,7 +71,7 @@ pub struct KurosabiConfig {
     /// サーバーで使用するスレッド数。
     ///
     /// リクエストを処理するワーカースレッドの数を指定します。
-    thread: usize,
+    pub thread: usize,
     /// The name of the worker threads.
     ///
     /// This is used to identify the worker threads in logs or debugging tools.
@@ -77,7 +79,7 @@ pub struct KurosabiConfig {
     /// ワーカースレッドの名前。
     ///
     /// ログやデバッグツールでスレッドを識別するために使用されます。
-    thread_name: String,
+    pub thread_name: String,
     /// The size of the task queue for the worker pool.
     ///
     /// This defines how many tasks can be queued for processing before new tasks are rejected.
@@ -85,7 +87,7 @@ pub struct KurosabiConfig {
     /// ワーカープールのタスクキューサイズ。
     ///
     /// 新しいタスクが拒否されるまでにキューできるタスク数を指定します。
-    queue_size: usize,
+    pub queue_size: usize,
     /// Whether to allow the reuse of local addresses.
     ///
     /// If enabled, the server can bind to an address that is in a TIME_WAIT state.
@@ -93,7 +95,7 @@ pub struct KurosabiConfig {
     /// ローカルアドレスの再利用を許可するかどうか。
     ///
     /// 有効にすると、TIME_WAIT状態のアドレスにもバインドできます。
-    reuse_address: bool,
+    pub reuse_address: bool,
     /// Whether to disable Nagle's algorithm for the socket.
     ///
     /// Disabling Nagle's algorithm can reduce latency for small packets by sending them immediately.
@@ -101,7 +103,7 @@ pub struct KurosabiConfig {
     /// ソケットのNagleアルゴリズムを無効化するかどうか。
     ///
     /// 無効化すると、小さなパケットを即時送信し、遅延を減らせます。
-    nodelay: bool,
+    pub nodelay: bool,
     /// The maximum number of pending connections in the backlog.
     ///
     /// This sets the maximum number of connections that can be queued before the server starts rejecting new ones.
@@ -109,7 +111,7 @@ pub struct KurosabiConfig {
     /// バックログの最大保留接続数。
     ///
     /// サーバーが新しい接続を拒否するまでにキューできる最大接続数を指定します。
-    backlog: usize,
+    pub backlog: usize,
     /// The size of the send buffer for the socket, in bytes.
     ///
     /// This controls the amount of data that can be buffered for sending before the socket blocks.
@@ -117,7 +119,7 @@ pub struct KurosabiConfig {
     /// ソケットの送信バッファサイズ（バイト単位）。
     ///
     /// ソケットがブロックする前に送信できるデータ量を制御します。
-    send_buffer_size: usize,
+    pub send_buffer_size: usize,
     /// The size of the receive buffer for the socket, in bytes.
     ///
     /// This controls the amount of data that can be buffered for receiving before the socket blocks.
@@ -125,7 +127,7 @@ pub struct KurosabiConfig {
     /// ソケットの受信バッファサイズ（バイト単位）。
     ///
     /// ソケットがブロックする前に受信できるデータ量を制御します。
-    recv_buffer_size: usize,
+    pub recv_buffer_size: usize,
     /// Whether to enable TCP keep-alive.
     ///
     /// If enabled, the server will periodically send keep-alive packets to ensure the connection is still active.
@@ -133,7 +135,7 @@ pub struct KurosabiConfig {
     /// TCP Keep-Aliveを有効にするかどうか。
     ///
     /// 有効にすると、サーバーは定期的にKeep-Aliveパケットを送信し、接続が生きているか確認します。
-    tcp_keepalive_enabled: bool,
+    pub tcp_keepalive_enabled: bool,
     /// The idle time before the first keep-alive packet is sent.
     ///
     /// This specifies how long the connection can remain idle before the first keep-alive packet is sent.
@@ -141,7 +143,7 @@ pub struct KurosabiConfig {
     /// 最初のKeep-Aliveパケット送信までのアイドル時間。
     ///
     /// 接続がアイドル状態になってから最初のKeep-Aliveパケットを送信するまでの時間を指定します。
-    tcp_keepalive_time: Duration,
+    pub tcp_keepalive_time: Duration,
     /// The interval between subsequent keep-alive packets.
     ///
     /// This specifies the time between keep-alive packets after the first one is sent.
@@ -149,15 +151,17 @@ pub struct KurosabiConfig {
     /// 2回目以降のKeep-Aliveパケット送信間隔。
     ///
     /// 最初の送信以降、Keep-Aliveパケットを送信する間隔を指定します。
-    tcp_keepalive_interval: Duration,
+    pub tcp_keepalive_interval: Duration,
+    /// HTTP Keep-Aliveタイムアウト時間。
+    pub http_keepalive_timeout: Duration,
     // 接続受け入れスレッド数。デフォルトは1
     // accept_threads: usize,
 }
 
-impl<E, C> KurosabiServerBuilder<E, C>
+impl<R, C> KurosabiServerBuilder<R, C>
 where
-    E: Executor<C> + Send + Sync + 'static,
     C: Clone + Sync + Send + 'static + ContextMiddleware<C>,
+    R: GenRouter<Arc<BoxedHandler<C>>> + 'static,
 {
     /// Creates a new `KurosabiServerBuilder` with default configuration.
     ///
@@ -173,7 +177,7 @@ where
     /// * `worker` - ワーカー実装を格納した`Arc`。
     ///
     /// このメソッドは、ビルダーメソッドでカスタマイズ可能なデフォルト設定で初期化します。
-    pub fn new(executor: E) -> KurosabiServerBuilder<E, C> {
+    pub fn new(context: C, router: R) -> KurosabiServerBuilder<R, C> {
         KurosabiServerBuilder {
             config: KurosabiConfig {
                 host: [127, 0, 0, 1],
@@ -189,10 +193,11 @@ where
                 tcp_keepalive_enabled: true,
                 tcp_keepalive_time: Duration::from_secs(30),
                 tcp_keepalive_interval: Duration::from_secs(10),
+                http_keepalive_timeout: Duration::from_secs(60),
                 // accept_threads: 1,
             },
-            proc_executor: Arc::new(executor),
-            _marker: std::marker::PhantomData,
+            context,
+            router,
         }
     }
 
@@ -429,6 +434,24 @@ where
         self
     }
 
+    /// Sets the HTTP Keep-Alive timeout duration.
+    ///
+    /// # Arguments
+    /// * `val` - The duration of the HTTP Keep-Alive timeout.
+    /// 
+    /// This specifies how long the server will keep an HTTP connection alive after the last request.
+    /// 
+    /// HTTP Keep-Aliveタイムアウト時間を設定します。
+    /// 
+    /// # 引数
+    /// * `val` - HTTP Keep-AliveタイムアウトのDuration。
+    /// 
+    /// この時間は、最後のリクエスト後にサーバーがHTTP接続を維持する期間を指定します。
+    pub fn http_keepalive_timeout(mut self, val: Duration) -> Self {
+        self.config.http_keepalive_timeout = val;
+        self
+    }
+
     // /// Sets the number of accept threads.
     // pub fn accept_threads(mut self, count: usize) -> Self {
     //     self.config.accept_threads = count;
@@ -440,12 +463,15 @@ where
     /// 
     /// サーバーをビルドします
     /// 新しいKurosabiServerインスタンスを作成します
-    pub fn build(self) -> KurosabiServer<E, C> {
-        let thread_mum = self.config.thread;
-        let queue_size = self.config.queue_size;
-        let executor = Arc::clone(&self.proc_executor);
+    pub fn build(mut self) -> KurosabiServer<R, C> {
+        self.router.build();
+        let config = Arc::new(self.config);
+        let proc_executor = kurosabi::DefaultWorker::new(Arc::new(self.router), Arc::new(self.context), Arc::clone(&config));
+        let thread_mum = config.thread;
+        let queue_size = config.queue_size;
+        let executor = Arc::new(proc_executor);
         KurosabiServer {
-            config: self.config,
+            config: Arc::clone(&config),
             global_queue: Arc::new(ArrayQueue::new(queue_size)),
             workers_load: Arc::new(
                 (0..thread_mum)
@@ -454,13 +480,12 @@ where
                     .into_boxed_slice()),
             workers: Arc::new(Vec::new()),
             proc_executor: executor,
-            _marker: std::marker::PhantomData, // Use PhantomData to indicate that E is used
         }
     }
 }
-impl<E, C> KurosabiServer<E, C> 
-where 
-    E: Executor<C> + Send + Sync + 'static,
+impl<R, C> KurosabiServer<R, C>
+where
+    R: GenRouter<Arc<BoxedHandler<C>>> + 'static,
     C: Clone + Sync + Send + 'static + ContextMiddleware<C>,
 {
     /// Starts the server asynchronously without blocking the current thread.
@@ -477,7 +502,7 @@ where
         // Start workers using the current runtime handle
         let mut workers = Vec::with_capacity(self.config.thread);
         for worker_id in 0..self.config.thread {
-            let worker = DefaultWorker::new(
+            let worker = worker::DefaultWorker::new(
                 handle.clone(),
                 Arc::clone(&self.proc_executor),
                 Arc::clone(&self.global_queue),

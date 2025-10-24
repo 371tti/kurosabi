@@ -53,5 +53,6 @@ async fn main() {
         .nodelay(true)
         .host([0, 0, 0, 0])
         .port(85)
+        .http_keepalive_timeout(Duration::from_secs(120))
         .build().run_async().await;
 }

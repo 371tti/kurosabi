@@ -1,4 +1,3 @@
-use std::time::Duration;
 use std::{pin::Pin, sync::Arc};
 use log::{debug, error, info, warn};
 use tokio::time::timeout;
@@ -7,6 +6,7 @@ use crate::api::{GETJsonAPI, POSTJsonAPI};
 use crate::context::ContextMiddleware;
 use crate::error::HttpError;
 use crate::server::worker::Executor;
+use crate::server::KurosabiConfig;
 use crate::{context::DefaultContext, request::Req, response::Res, router::{BoxedHandler, DefaultRouter, GenRouter}, server::{KurosabiServerBuilder, TcpConnection}};
 use crate::utils::method::Method;
 pub struct Kurosabi<C, R>
@@ -217,10 +217,8 @@ where
     }
     
     /// ルーターをビルドしてサーバーを生成する
-    pub fn server(mut self) -> KurosabiServerBuilder<DefaultWorker<C, R>, C> {
-        self.router.build();
-        let worker = DefaultWorker::new(Arc::new(self.router), Arc::new(self.context));
-        KurosabiServerBuilder::new(worker)
+    pub fn server(self) -> KurosabiServerBuilder<R, C> {
+        KurosabiServerBuilder::new(self.context, self.router)
     }
 }
 
@@ -231,6 +229,7 @@ where
 {
     router: Arc<R>,
     context: Arc<C>,
+    config: Arc<KurosabiConfig>,
 }
 
 impl<C, R> DefaultWorker<C, R>
@@ -238,10 +237,11 @@ where
     C: Clone + Sync + Send + 'static,
     R: GenRouter<Arc<BoxedHandler<C>>> + 'static,
 {
-    pub fn new(router: Arc<R>, context: Arc<C>) -> DefaultWorker<C, R> {
+    pub fn new(router: Arc<R>, context: Arc<C>, config: Arc<KurosabiConfig>) -> DefaultWorker<C, R> {
         DefaultWorker {
             router,
             context,
+            config,
         }
     }
 }
@@ -262,7 +262,7 @@ impl<C, R> Executor<C> for DefaultWorker<C, R>
         // Req は内部に TCP 接続を保持つ
         let mut req = Req::new(connection);
 
-        let idle_timeout = Duration::from_secs(60); // 60秒のアイドルタイムアウト
+        let idle_timeout = self.config.http_keepalive_timeout;
         
         loop {
             // 新しいリクエストが来るまで待機
@@ -328,7 +328,7 @@ impl<C, R> Executor<C> for DefaultWorker<C, R>
                         context.res.header.set("Connection", "close");
                     } else if context.req.version == "HTTP/1.1" {
                         context.res.header.set("Connection", "keep-alive");
-                        context.res.header.set("Keep-Alive", "timeout=60");
+                        context.res.header.set("Keep-Alive", &format!("timeout={}", self.config.http_keepalive_timeout.as_secs()));
                     } else {
                         context.res.header.set("Connection", "close");
                     }

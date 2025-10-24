@@ -5,6 +5,7 @@ use body::{Body, Compression, CompressionConfig};
 use tokio::io::AsyncWriteExt;
 
 use crate::request::Req;
+use crate::utils::status;
 use crate::{error::KurosabiError, utils::header::Header};
 
 pub mod body;
@@ -94,7 +95,8 @@ impl Res {
         self.body.write_default_headers(&mut self.header).await;
         let writer = req.connection.writer();
         // ヘッダを書き込む
-        writer.write_all(format!("HTTP/1.1 {}\r\n", self.code).as_bytes()).await.map_err(|e| KurosabiError::IoError(e))?;
+        let reason_phrase = status::code_to_reason_phrase(self.code);
+        writer.write_all(format!("HTTP/1.1 {} {}\r\n", self.code, reason_phrase).as_bytes()).await.map_err(|e| KurosabiError::IoError(e))?;
         for (key, value) in &self.header.headers {
             writer.write_all(format!("{}: {}\r\n", key, value).as_bytes()).await.map_err(|e| KurosabiError::IoError(e))?;
         }
@@ -108,5 +110,4 @@ impl Res {
         writer.flush().await.map_err(|e| KurosabiError::IoError(e))?;
         Ok(())
     }
-    
 }
