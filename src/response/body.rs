@@ -15,7 +15,7 @@ impl Res {
     #[inline]
     pub fn text(&mut self, text: &str) -> &mut Self {
         self.header.set("Content-Type", "text/plain; charset=utf-8");
-        self.header.set("Content-Length", &text.len().to_string());
+        self.header.set("Content-Length", &text.as_bytes().len().to_string());
         self.body = Body::Text(text.to_string());
         self
     }
@@ -24,7 +24,7 @@ impl Res {
     #[inline]
     pub fn html(&mut self, text: &str) -> &mut Self {
         self.header.set("Content-Type", "text/html");
-        self.header.set("Content-Length", &text.len().to_string());
+        self.header.set("Content-Length", &text.as_bytes().len().to_string());
         self.body = Body::Text(text.to_string());
         self
     }
@@ -33,7 +33,7 @@ impl Res {
     #[inline]
     pub fn xml(&mut self, text: &str) -> &mut Self {
         self.header.set("Content-Type", "application/xml");
-        self.header.set("Content-Length", &text.len().to_string());
+        self.header.set("Content-Length", &text.as_bytes().len().to_string());
         self.body = Body::Text(text.to_string());
         self
     }
@@ -42,7 +42,7 @@ impl Res {
     #[inline]
     pub fn js(&mut self, text: &str) -> &mut Self {
         self.header.set("Content-Type", "application/javascript");
-        self.header.set("Content-Length", &text.len().to_string());
+        self.header.set("Content-Length", &text.as_bytes().len().to_string());
         self.body = Body::Text(text.to_string());
         self
     }
@@ -51,7 +51,7 @@ impl Res {
     #[inline]
     pub fn css(&mut self, text: &str) -> &mut Self {
         self.header.set("Content-Type", "text/css");
-        self.header.set("Content-Length", &text.len().to_string());
+        self.header.set("Content-Length", &text.as_bytes().len().to_string());
         self.body = Body::Text(text.to_string());
         self
     }
@@ -60,7 +60,7 @@ impl Res {
     #[inline]
     pub fn csv(&mut self, text: &str) -> &mut Self {
         self.header.set("Content-Type", "text/csv");
-        self.header.set("Content-Length", &text.len().to_string());
+        self.header.set("Content-Length", &text.as_bytes().len().to_string());
         self.body = Body::Text(text.to_string());
         self
     }
@@ -69,7 +69,7 @@ impl Res {
     #[inline]
     pub fn json(&mut self, text: &str) -> &mut Self {
         self.header.set("Content-Type", "application/json");
-        self.header.set("Content-Length", &text.len().to_string());
+        self.header.set("Content-Length", &text.as_bytes().len().to_string());
         self.body = Body::Text(text.to_string());
         self
     }
@@ -79,7 +79,7 @@ impl Res {
     pub fn json_value(&mut self, value: &serde_json::Value) -> &mut Self {
         self.header.set("Content-Type", "application/json");
         let text = serde_json::to_string(value).unwrap();
-        self.header.set("Content-Length", &text.len().to_string());
+        self.header.set("Content-Length", &text.as_bytes().len().to_string());
         self.body = Body::Text(text);
         self
     }
@@ -103,16 +103,16 @@ impl Res {
 
     /// ストリームレスポンス
     /// AsyncReadを実装したストリームを渡してね
-    /// Content-Length ヘッダを指定してください じゃないとHTTPの仕様上エラー
+    /// context_length が必要、 不明な場合は .chunked_stream() を推奨します
     #[inline]
-    pub fn stream(&mut self, stream: Pin<Box<dyn AsyncRead + Send + Sync>>, buffer_size: usize) -> &mut Self {
+    pub fn stream(&mut self, stream: Pin<Box<dyn AsyncRead + Send + Sync>>, buffer_size: usize, content_length: usize) -> &mut Self {
+        self.header.set("Content-Length", &content_length.to_string());
         self.body = Body::Stream(stream, buffer_size);
         self
     }
 
     /// チャンクドストリームレスポンス
     /// AsyncReadを実装したストリームを渡してね
-    /// Content-Length ヘッダはいらないよ Transfer-Encoding: chunked が使用されます
     #[inline]
     pub fn chunked_stream(&mut self, stream: Pin<Box<dyn AsyncRead + Send + Sync>>, buffer_size: usize) -> &mut Self {
         self.body = Body::ChunkedStream(stream, buffer_size);
