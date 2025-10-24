@@ -4,8 +4,11 @@ use kurosabi::{response::{body::CompressionConfig, Res}, Kurosabi};
 use tokio::{io::{duplex, AsyncWriteExt}, time::sleep};
 
 
-fn main() {
+#[tokio::main]  
+async fn main() {
     let mut kurosabi = Kurosabi::new();
+
+    
 
     kurosabi.get("/hi", |mut c| async move {
         c.res.text("hello, kurosabi! 錆を炎であぶるhello, kurosabi! 錆を炎であぶるhello, kurosabi! 錆を炎であぶるhello, kurosabi! 錆を炎であぶるhello, kurosabi! 錆を炎であぶるhello, kurosabi! 錆を炎であぶる");
@@ -57,5 +60,5 @@ fn main() {
 
     kurosabi.server()
         .nodelay(true)
-        .build().run();
+        .build().run_async().await;
 }

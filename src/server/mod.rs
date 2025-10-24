@@ -20,7 +20,7 @@ where
     global_queue: Arc<ArrayQueue<TcpConnection>>,
     workers_load: Arc<Box<[AtomicU64]>>,
     proc_executor: Arc<E>,
-    workers: Vec<DefaultWorker<E, C>>,
+    workers: Arc<Vec<DefaultWorker<E, C>>>,
     _marker: std::marker::PhantomData<E>, // Added PhantomData to use E
 }
 
@@ -132,7 +132,7 @@ pub struct KurosabiConfig {
     /// TCP Keep-Aliveを有効にするかどうか。
     ///
     /// 有効にすると、サーバーは定期的にKeep-Aliveパケットを送信し、接続が生きているか確認します。
-    keepalive_enabled: bool,
+    tcp_keepalive_enabled: bool,
     /// The idle time before the first keep-alive packet is sent.
     ///
     /// This specifies how long the connection can remain idle before the first keep-alive packet is sent.
@@ -140,7 +140,7 @@ pub struct KurosabiConfig {
     /// 最初のKeep-Aliveパケット送信までのアイドル時間。
     ///
     /// 接続がアイドル状態になってから最初のKeep-Aliveパケットを送信するまでの時間を指定します。
-    keepalive_time: Duration,
+    tcp_keepalive_time: Duration,
     /// The interval between subsequent keep-alive packets.
     ///
     /// This specifies the time between keep-alive packets after the first one is sent.
@@ -148,9 +148,9 @@ pub struct KurosabiConfig {
     /// 2回目以降のKeep-Aliveパケット送信間隔。
     ///
     /// 最初の送信以降、Keep-Aliveパケットを送信する間隔を指定します。
-    keepalive_interval: Duration,
-    /// 接続受け入れスレッド数。未設定時はワーカースレッド数の半分を使用。
-    accept_threads: Option<usize>,
+    tcp_keepalive_interval: Duration,
+    /// 接続受け入れスレッド数。デフォルトは1
+    accept_threads: usize,
 }
 
 impl<E, C> KurosabiServerBuilder<E, C>
@@ -185,10 +185,10 @@ where
                 backlog: 2048,
                 send_buffer_size: 64 * 1024,
                 recv_buffer_size: 64 * 1024,
-                keepalive_enabled: true,
-                keepalive_time: Duration::from_secs(30),
-                keepalive_interval: Duration::from_secs(10),
-                accept_threads: None,
+                tcp_keepalive_enabled: true,
+                tcp_keepalive_time: Duration::from_secs(30),
+                tcp_keepalive_interval: Duration::from_secs(10),
+                accept_threads: 1,
             },
             proc_executor: Arc::new(executor),
             _marker: std::marker::PhantomData,
@@ -387,8 +387,8 @@ where
     /// * `val` - Keep-Aliveを有効にするかどうか。
     ///
     /// 有効にすると、サーバーは定期的にKeep-Aliveパケットを送信し、接続が生きているか確認します。
-    pub fn keepalive_enabled(mut self, val: bool) -> Self {
-        self.config.keepalive_enabled = val;
+    pub fn tcp_keepalive_enabled(mut self, val: bool) -> Self {
+        self.config.tcp_keepalive_enabled = val;
         self
     }
 
@@ -405,8 +405,8 @@ where
     /// * `val` - アイドル時間のDuration。
     ///
     /// 接続がアイドル状態になってから最初のKeep-Aliveパケットを送信するまでの時間を指定します。
-    pub fn keepalive_time(mut self, val: Duration) -> Self {
-        self.config.keepalive_time = val;
+    pub fn tcp_keepalive_time(mut self, val: Duration) -> Self {
+        self.config.tcp_keepalive_time = val;
         self
     }
 
@@ -423,14 +423,14 @@ where
     /// * `val` - 送信間隔のDuration。
     ///
     /// 最初の送信以降、Keep-Aliveパケットを送信する間隔を指定します。
-    pub fn keepalive_interval(mut self, val: Duration) -> Self {
-        self.config.keepalive_interval = val;
+    pub fn tcp_keepalive_interval(mut self, val: Duration) -> Self {
+        self.config.tcp_keepalive_interval = val;
         self
     }
 
     /// Sets the number of accept threads.
     pub fn accept_threads(mut self, count: usize) -> Self {
-        self.config.accept_threads = Some(count);
+        self.config.accept_threads = count;
         self
     }
 
@@ -443,7 +443,6 @@ where
         let thread_mum = self.config.thread;
         let queue_size = self.config.queue_size;
         let executor = Arc::clone(&self.proc_executor);
-        // Create a new KurosabiServer instance with the provided configuration
         KurosabiServer {
             config: self.config,
             global_queue: Arc::new(ArrayQueue::new(queue_size)),
@@ -452,7 +451,7 @@ where
                     .map(|_| AtomicU64::new(0))
                     .collect::<Vec<_>>()
                     .into_boxed_slice()),
-            workers: Vec::with_capacity(thread_mum),
+            workers: Arc::new(Vec::new()),
             proc_executor: executor,
             _marker: std::marker::PhantomData, // Use PhantomData to indicate that E is used
         }
@@ -477,6 +476,8 @@ where
         // Start workers using the current runtime handle
         let workers_load = Arc::clone(&self.workers_load);
         let proc_executor = Arc::clone(&self.proc_executor);
+        let thread_mum = self.config.thread;
+        let mut workers = Vec::with_capacity(thread_mum);
         for worker_id in 0..self.config.thread {
             let worker = DefaultWorker::new(
                 handle.clone(),
@@ -486,9 +487,11 @@ where
                 worker_id as u32,
             );
             worker.run();
-            self.workers.push(worker);
+            workers.push(worker);
             info!("Worker {} started", worker_id);
         }
+
+        self.workers = Arc::new(workers);
 
         info!(
             "Server starting on http://{}.{}.{}.{}:{}",
@@ -502,46 +505,54 @@ where
             info!("Server also accessible on http://localhost:{}", self.config.port);
         }
 
-        // Create the Tokio listener within the runtime context
-        let listener = self.create_configured_listener();
+        for accept_thread_id in 0..self.config.accept_threads {
+            // Create the Tokio listener within the runtime context
+            let listener = self.create_configured_listener();
+            let global_queue = Arc::clone(&self.global_queue);
+            let workers_load = Arc::clone(&self.workers_load);
+            let workers = Arc::clone(&self.workers); 
+            handle.spawn(async move {
+                // Accept loop — never returns
+                loop {
+                    match listener.accept().await {
+                        Ok((socket, addr)) => {
+                            debug!("Accepted connection from {}", addr);
+                            let connection = TcpConnection::new(socket);
 
-        // Accept loop — never returns
-        loop {
-            match listener.accept().await {
-                Ok((socket, addr)) => {
-                    debug!("Accepted connection from {}", addr);
-                    let connection = TcpConnection::new(socket);
+                            let first_idle_worker = workers_load
+                                .iter()
+                                .enumerate()
+                                .find_map(|(worker_id, load)| {
+                                    if load.load(Relaxed) == 0 {
+                                        Some(worker_id)
+                                    } else {
+                                        None
+                                    }
+                                });
 
-                    let first_idle_worker = self
-                        .workers_load
-                        .iter()
-                        .enumerate()
-                        .find_map(|(worker_id, load)| {
-                            if load.load(Relaxed) == 0 {
-                                Some(worker_id)
+                            if let Some(worker_id) = first_idle_worker {
+                                workers[worker_id].execute(connection);
                             } else {
-                                None
+                                global_queue.push(connection).unwrap_or_else(|_| {
+                                    error!(
+                                        "Failed to push connection to global queue - queue is full"
+                                    );
+                                    println!(
+                                        "Failed to push connection to global queue - queue is full"
+                                    );
+                                });
                             }
-                        });
-
-                    if let Some(worker_id) = first_idle_worker {
-                        self.workers[worker_id].execute(connection);
-                    } else {
-                        self.global_queue.push(connection).unwrap_or_else(|_| {
-                            error!(
-                                "Failed to push connection to global queue - queue is full"
-                            );
-                            println!(
-                                "Failed to push connection to global queue - queue is full"
-                            );
-                        });
+                        }
+                        Err(e) => {
+                            error!("Failed to accept connection: {}", e);
+                        }
                     }
                 }
-                Err(e) => {
-                    error!("Failed to accept connection: {}", e);
-                }
-            }
+            });
+            info!("Accept thread {} started", accept_thread_id);
         }
+        // Await forever to keep the server running
+        std::future::pending::<()>().await;
     }
 
     /// Starts the server and begins accepting connections.
@@ -551,8 +562,6 @@ where
         let workers_load = Arc::clone(&self.workers_load); // Arcをクローン
         let proc_executor = Arc::clone(&self.proc_executor); // Arcをクローン
 
-        // ランタイム本体を保持する（Handleだけにしない）
-        let mut rt_guard: Option<tokio::runtime::Runtime> = None;
         let handle = match Handle::try_current() {
             Ok(h) => h,
             Err(_) => {
@@ -562,9 +571,8 @@ where
                     .enable_all()
                     .build()
                     .expect("Failed to create Tokio runtime");
-                let h = rt.handle().clone();
-                rt_guard = Some(rt); // Runtime を保持
-                h
+                info!("Created new Tokio runtime");
+                return rt.block_on(self.run_async());
             }
         };
 
@@ -574,6 +582,7 @@ where
 
         let proc_executor = Arc::clone(&self.proc_executor); // またArcをクローン
     
+        let mut workers = Vec::with_capacity(self.config.thread);
         for worker_id in 0..self.config.thread {
             let worker = DefaultWorker::new(
                 handle.clone(),
@@ -583,9 +592,10 @@ where
                 worker_id as u32, // worker_id
             );
             worker.run();
-            self.workers.push(worker);
+            workers.push(worker);
             info!("Worker {} started", worker_id);
         }
+        self.workers = Arc::new(workers);
 
         info!(
             "Server starting on http://{}.{}.{}.{}:{}",
@@ -605,38 +615,49 @@ where
             );
         }
 
-        // Runtime ガードを保持したまま block_on
-        let _keep_rt_alive = rt_guard.as_ref();
-        handle.block_on(async move {
+        for accept_thread_id in 0..self.config.accept_threads {
+            // Create the Tokio listener within the runtime context
             let listener = self.create_configured_listener();
-            loop {
-                match listener.accept().await {
-                    Ok((socket, addr)) => {
-                        debug!("Accepted connection from {}", addr);
-                        let connection = TcpConnection::new(socket);
-                        let first_idle_worker = self.workers_load.iter().enumerate().find_map(|(worker_id, load)| {
-                            if load.load(Relaxed) == 0 {
-                                Some(worker_id)
-                            } else {
-                                None
-                            }
-                        });
+            let global_queue = Arc::clone(&self.global_queue);
+            let workers_load = Arc::clone(&self.workers_load);
+            let workers = Arc::clone(&self.workers); 
+            handle.spawn(async move {
+                // Accept loop — never returns
+                loop {
+                    match listener.accept().await {
+                        Ok((socket, addr)) => {
+                            debug!("Accepted connection from {}", addr);
+                            let connection = TcpConnection::new(socket);
 
-                        if let Some(worker_id) = first_idle_worker {
-                            self.workers[worker_id].execute(connection);
-                        } else {
-                            self.global_queue.push(connection).unwrap_or_else(|_| {
-                                error!("Failed to push connection to global queue - queue is full");
-                                println!("Failed to push connection to global queue - queue is full");
-                            });
+                            let first_idle_worker = workers_load
+                                .iter()
+                                .enumerate()
+                                .find_map(|(worker_id, load)| {
+                                    if load.load(Relaxed) == 0 {
+                                        Some(worker_id)
+                                    } else {
+                                        None
+                                    }
+                                });
+
+                            if let Some(worker_id) = first_idle_worker {
+                                workers[worker_id].execute(connection);
+                            } else {
+                                global_queue.push(connection).unwrap_or_else(|_| {
+                                    error!(
+                                        "Failed to push connection to global queue - queue is full"
+                                    );
+                                });
+                            }
+                        }
+                        Err(e) => {
+                            error!("Failed to accept connection: {}", e);
                         }
                     }
-                    Err(e) => {
-                        error!("Failed to accept connection: {}", e);
-                    }
                 }
-            }
-        });
+            });
+            info!("Accept thread {} started", accept_thread_id);
+        }
     }
 
     fn create_configured_listener(&self) -> TcpListener {
@@ -653,11 +674,11 @@ where
         socket.set_send_buffer_size(self.config.send_buffer_size).unwrap(); // 送信バッファを設定
         socket.set_recv_buffer_size(self.config.recv_buffer_size).unwrap(); // 受信バッファを設定
 
-        if self.config.keepalive_enabled {
+        if self.config.tcp_keepalive_enabled {
             socket.set_tcp_keepalive(
                 &TcpKeepalive::new()
-                    .with_time(self.config.keepalive_time) // 最初のKeep-Alive送信までの時間
-                    .with_interval(self.config.keepalive_interval) // Keep-Aliveパケットの間隔
+                    .with_time(self.config.tcp_keepalive_time) // 最初のKeep-Alive送信までの時間
+                    .with_interval(self.config.tcp_keepalive_interval) // Keep-Aliveパケットの間隔
             ).unwrap();
             socket.set_keepalive(true).unwrap();
         }
