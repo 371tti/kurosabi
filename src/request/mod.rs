@@ -51,15 +51,19 @@ impl Req {
 
     /// httpリクエストのヘッダを最低限パースする
     #[inline]
-    pub async fn parse_headers(&mut self) -> Result<(), KurosabiError> {
+    pub async fn parse_headers(&mut self, max_header_size: usize) -> Result<(), KurosabiError> {
+        let mut total_header_size = 0;
         let reader = self.connection.reader();
         let mut line_buf = String::with_capacity(1024);
-
         // Parse the request line first
         reader
             .read_line(&mut line_buf)
             .await
             .map_err(KurosabiError::IoError)?;
+        total_header_size += line_buf.len();
+        if total_header_size > max_header_size {
+            return Err(KurosabiError::HeaderTooLarge);
+        }
         let parts: Vec<&str> = line_buf.trim().split_whitespace().collect();
         if parts.len() < 3 {
             return Err(KurosabiError::InvalidHttpHeader(line_buf));
@@ -76,6 +80,10 @@ impl Req {
                 .read_line(&mut line_buf)
                 .await
                 .map_err(KurosabiError::IoError)?;
+            total_header_size += line_buf.len();
+            if total_header_size > max_header_size {
+                return Err(KurosabiError::HeaderTooLarge);
+            }
             let trimmed = line_buf.trim();
             if trimmed.is_empty() {
                 break;

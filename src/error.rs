@@ -4,6 +4,7 @@ pub enum KurosabiError {
     InvalidHttpHeader(String),
     InvalidHttpRangeHeader(String),
     IoError(std::io::Error),
+    HeaderTooLarge
 }
 
 impl std::fmt::Display for KurosabiError {
@@ -13,6 +14,7 @@ impl std::fmt::Display for KurosabiError {
             
             KurosabiError::InvalidHttpRangeHeader(header) => write!(f, "Invalid http range header: {}", header),
             KurosabiError::IoError(err) => write!(f, "IO error: {}", err),
+            KurosabiError::HeaderTooLarge => write!(f, "HTTP header too large"),
         }
     }
 }
@@ -23,6 +25,7 @@ impl std::fmt::Debug for KurosabiError {
             KurosabiError::InvalidHttpHeader(header) => write!(f, "Invalid http header: {}", header),
             KurosabiError::InvalidHttpRangeHeader(header) => write!(f, "Invalid http range header: {}", header),
             KurosabiError::IoError(err) => write!(f, "IO error: {}", err),
+            KurosabiError::HeaderTooLarge => write!(f, "HTTP header too large"),
         }
     }
 }

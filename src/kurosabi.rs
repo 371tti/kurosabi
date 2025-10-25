@@ -283,7 +283,7 @@ impl<C, R> Executor<C> for DefaultWorker<C, R>
             // リクエストのタイミングを計測
             let rev_to_res_time = std::time::Instant::now();
             // HTTPリクエストのヘッダーをパース
-            if let Err(e) = req.parse_headers().await {
+            if let Err(e) = req.parse_headers(self.config.max_http_header_size).await {
                 error!("Failed to parse headers: {:?}", e);
                 break;
             }

@@ -154,6 +154,10 @@ pub struct KurosabiConfig {
     pub tcp_keepalive_interval: Duration,
     /// HTTP Keep-Aliveタイムアウト時間。
     pub http_keepalive_timeout: Duration,
+    /// 最大HTTPヘッダサイズ
+    /// デフォルトは8KB
+    /// bytes単位
+    pub max_http_header_size: usize,
     // 接続受け入れスレッド数。デフォルトは1
     // accept_threads: usize,
 }
@@ -194,6 +198,7 @@ where
                 tcp_keepalive_time: Duration::from_secs(30),
                 tcp_keepalive_interval: Duration::from_secs(10),
                 http_keepalive_timeout: Duration::from_secs(60),
+                max_http_header_size: 8 * 1024,
                 // accept_threads: 1,
             },
             context,
@@ -449,6 +454,24 @@ where
     /// この時間は、最後のリクエスト後にサーバーがHTTP接続を維持する期間を指定します。
     pub fn http_keepalive_timeout(mut self, val: Duration) -> Self {
         self.config.http_keepalive_timeout = val;
+        self
+    }
+
+    /// Sets the maximum HTTP header size.
+    ///
+    /// # Arguments
+    /// * `size` - The maximum size of HTTP headers in bytes.
+    /// 
+    /// This defines the maximum allowed size for HTTP headers to prevent excessively large headers.
+    /// 
+    /// 最大HTTPヘッダサイズを設定します。
+    /// 
+    /// # 引数
+    /// * `size` - HTTPヘッダの最大サイズ（バイト単位
+    /// 
+    /// このサイズは、過度に大きなヘッダを防ぐための最大許容サイズを定義します。
+    pub fn max_http_header_size(mut self, size: usize) -> Self {
+        self.config.max_http_header_size = size;
         self
     }
 
