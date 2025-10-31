@@ -5,7 +5,6 @@ use tokio::{io::{duplex, AsyncWriteExt}, time::sleep};
 
 #[tokio::main]
 async fn main() {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("debug")).init();
     let mut kurosabi = Kurosabi::new();
 
     kurosabi.get("/", |mut c| async move {
@@ -18,10 +17,8 @@ async fn main() {
     });
 
     kurosabi.get("/chunked", |mut c| async move {
-        // デュプレックス作成（書き込み側 a, 読み取り側 b）
-        let (mut a, b) = duplex(64); // バッファ容量は適宜調整
+        let (mut a, b) = duplex(64);
 
-        // 送信用タスクを spawn（切断時 write が失敗してループ終了）
         tokio::spawn(async move {
             let frames = ["\x1b[2K\r(。-`ω-)", "\x1b[2K\r(。l`ωl)"];
             let mut idx = 0;
@@ -37,7 +34,6 @@ async fn main() {
             }
         });
 
-        // 読み取り側をそのまま AsyncRead として渡す
         let buffer_size = 24;
         c.res.header.set("Content-Type", "text/plain; charset=utf-8");
         c.res.chunked_stream(Box::pin(b), buffer_size);
@@ -51,8 +47,5 @@ async fn main() {
 
     kurosabi.server()
         .nodelay(true)
-        .host([0, 0, 0, 0])
-        .port(85)
-        .http_keepalive_timeout(Duration::from_secs(120))
         .build().run_async().await;
 }

@@ -24,4 +24,3 @@ tokio-util = { version = "0.7", features = ["io"] }
 brotli = "8.0.1" # 通信圧縮
 async-compression = { version = "0.4.27", features = ["tokio", "brotli"] }
 futures = "0.3.31"
-env_logger = "0.11.8"
