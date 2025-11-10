@@ -48,7 +48,6 @@ impl Path {
     #[inline]
     fn dec_segment(&mut self) {
         self.segments.segments = self.path.split('/')
-            .filter(|s| !s.is_empty())
             .map(String::from)
             .collect();
     }
