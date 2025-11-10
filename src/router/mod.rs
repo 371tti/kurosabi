@@ -116,7 +116,6 @@ impl<C: 'static> GenRouter<Arc<BoxedHandler<C>>> for DefaultRouter<C> {
 
         // セグメントへ（空要素は除外して正規化）
         let segs: Vec<&str> = clean_path.split('/')
-            .filter(|s| !s.is_empty())
             .collect();
 
         // 動的ルート（ワイルドカード無し）
@@ -148,6 +147,7 @@ impl<C: 'static> GenRouter<Arc<BoxedHandler<C>>> for DefaultRouter<C> {
                 }
                 // '*' には残りの全パスを結合
                 let rest = if segs.len() > prefix_len {
+                    // 後ろのパス復元
                     segs[prefix_len..].join("/")
                 } else {
                     String::new()
