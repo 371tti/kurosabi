@@ -8,13 +8,6 @@ kurosabi is an ultra-lightweight, fast, and simple web backend router that lever
 
 We value performance, lightweight design, and ease of use.
 
-> [!CAUTION]
-> ## Known Issues
-> Critical
-> If a worker thread panics, it will not restart, and the number of workers will decrease.
-> If all worker threads are gone, processing will stop.
-> As a temporary workaround, please avoid causing panics such as by using unwrap.
-
 ## ToDo
 - Initial Implementation
   - [x] Implement http_server
