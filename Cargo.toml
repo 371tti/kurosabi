@@ -9,9 +9,9 @@ repository = "https://github.com/371tti/kurosabi"
 readme = "README.md"
 
 [dependencies]
-tokio = { version = "1.47", features = ["rt-multi-thread", "macros", "io-util", "net", "time", "fs"] }
+compio = "0.17.0"
 log = "0.4"
-crossbeam-queue = "0.3.12"
+
 async-trait = "0.1.89"
 socket2 = "0.6.0"
 serde = { version = "1.0", features = ["derive"] }
