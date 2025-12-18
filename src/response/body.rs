@@ -78,7 +78,7 @@ impl Res {
     #[inline]
     pub fn json_value(&mut self, value: &serde_json::Value) -> &mut Self {
         self.header.set("Content-Type", "application/json");
-        let text = serde_json::to_string(value).unwrap();
+        let text = serde_json::to_string(value).expect("json to text");
         self.header.set("Content-Length", &text.as_bytes().len().to_string());
         self.body = Body::Text(text);
         self

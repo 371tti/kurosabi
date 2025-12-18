@@ -603,26 +603,26 @@ where
 
     fn create_configured_listener(&self) -> TcpListener {
         let addr = SocketAddr::from((self.config.host, self.config.port));
-        let socket = Socket::new(Domain::IPV4, socket2::Type::STREAM, Some(Protocol::TCP)).unwrap();
-        socket.set_reuse_address(self.config.reuse_address).unwrap();
-        socket.set_tcp_nodelay(self.config.nodelay).unwrap();
+        let socket = Socket::new(Domain::IPV4, socket2::Type::STREAM, Some(Protocol::TCP)).expect("create socket");
+        socket.set_reuse_address(self.config.reuse_address).expect("set reuse_address");
+        socket.set_tcp_nodelay(self.config.nodelay).expect("set tcp_nodelay");
 
-        socket.bind(&addr.into()).unwrap();
-        socket.set_reuse_address(self.config.reuse_address).unwrap();
+        socket.bind(&addr.into()).expect("bind socket");
+        socket.set_reuse_address(self.config.reuse_address).expect("set reuse_address");
 
-        socket.set_send_buffer_size(self.config.send_buffer_size).unwrap(); // 送信バッファを設定
-        socket.set_recv_buffer_size(self.config.recv_buffer_size).unwrap(); // 受信バッファを設定
+        socket.set_send_buffer_size(self.config.send_buffer_size).expect("set send_buffer_size"); // 送信バッファを設定
+        socket.set_recv_buffer_size(self.config.recv_buffer_size).expect("set recv_buffer_size"); // 受信バッファを設定
 
         if self.config.tcp_keepalive_enabled {
-            socket.set_keepalive(true).unwrap();
+            socket.set_keepalive(true).expect("set keepalive");
             socket.set_tcp_keepalive(
-                &TcpKeepalive::new()
-                    .with_time(self.config.tcp_keepalive_time) // 最初のKeep-Alive送信までの時間
-                    .with_interval(self.config.tcp_keepalive_interval) // Keep-Aliveパケットの間隔
-            ).unwrap();
+            &TcpKeepalive::new()
+                .with_time(self.config.tcp_keepalive_time) // 最初のKeep-Alive送信までの時間
+                .with_interval(self.config.tcp_keepalive_interval) // Keep-Aliveパケットの間隔
+            ).expect("set tcp_keepalive");
         }
-        socket.listen(self.config.backlog as i32).unwrap();
-        let listener = tokio::net::TcpListener::from_std(socket.into()).unwrap();
+        socket.listen(self.config.backlog as i32).expect("set listen");
+        let listener = tokio::net::TcpListener::from_std(socket.into()).expect("set tokio TcpListener");
         listener
     }
 }
@@ -653,6 +653,6 @@ impl TcpConnection {
     }
 
     pub async fn close(&mut self) {
-        self.writer.shutdown().await.unwrap();
+        self.writer.shutdown().await.expect("shutdown writer");
     }
 }

@@ -263,7 +263,7 @@ impl Header {
     pub fn del_cookie(&mut self, key: &str) {
         let indexs = self.indexs("Set-Cookie");
         for i in indexs {
-            let (_, v) = self.index_get(i).unwrap();
+            let (_, v) = self.index_get(i).expect("get header");
             if v.starts_with(&format!("{}=", key)) {
                 self.index_del(i);
             }
