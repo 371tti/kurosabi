@@ -1,3 +1,5 @@
+
+
 /// mod server では TCPレイヤーからのサーバー実装が行われます
 /// 
 /// kurosabiはその柔軟性を維持するためにTCPレイヤーで可能な限り開発者が直接操作可能なメソッドを提供することを目指す
@@ -6,16 +8,17 @@
 /// 
 
 
-pub struct TCPListener {
-    pub listener: compio::net::TcpListener,
+
+pub struct Ctx<C> {
+    pub c: C,
 }
 
-pub struct TCPConnection {
-    pub stream: compio::net::TcpStream,
+
+pub struct KurosabiRouterBuilder {
+
 }
 
-pub struct ConnectionQueue {
-    
-}
+/// Kurosabi Server の設定
+pub struct KurosabiServerBuilder {
 
-pub struct HTTP {}
+}

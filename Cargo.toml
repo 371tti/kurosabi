@@ -9,18 +9,13 @@ repository = "https://github.com/371tti/kurosabi"
 readme = "README.md"
 
 [dependencies]
-compio = "0.17.0"
+tokio = { version = "1", features = ["full"], optional = true }
+tokio-util = { version = "0.7", features = ["compat"], optional = true }
+compio = { version = "0.17.0", features = ["all"], optional = true }
 log = "0.4"
-
-async-trait = "0.1.89"
-socket2 = "0.6.0"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-ahash    = "0.8"      # 高速ハッシュねね
-smallvec = "1.15"
-html_format = "0.2.2"
-mime_guess = "2"
-tokio-util = { version = "0.7", features = ["io"] }
-brotli = "8.0" # 通信圧縮
-async-compression = { version = "0.4", features = ["tokio", "brotli"] }
 futures = "0.3"
+
+[features]
+default = ["compio-runtime"]
+tokio-runtime = ["dep:tokio", "dep:tokio-util"]
+compio-runtime = ["dep:compio"]
