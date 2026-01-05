@@ -43,16 +43,26 @@ impl<R: AsyncRead + Unpin + 'static> HttpRequest<R> {
     }
 }
 
-pub struct NotParsedHttpRequest<R: AsyncRead + Unpin + 'static> {
-    io_reader: BufReader<R>,
-    buf: Vec<u8>,
-}
-
-impl<R: AsyncRead + Unpin + 'static> NotParsedHttpRequest<R> {
-    pub fn new(io_reader: R) -> Self {
-        NotParsedHttpRequest {
-            io_reader: BufReader::new(io_reader),
-            buf: Vec::new(),
+impl<R: AsyncRead + Unpin + 'static> HttpRequest<R> {
+    pub async fn new(io_reader: R) -> Self {
+        let mut buf = Vec::new();
+        let mut io_reader = BufReader::new(io_reader);
+        let request_line = HttpRequestLine::parse_async(&mut io_reader, &mut buf).await.unwrap_or_else(|e| {
+            HttpRequestLine {
+                method: HttpMethod::ERR,
+                path: if let RouterError::InvalidHttpRequest(range, _) = e {
+                    range
+                } else {
+                    0..0
+                },
+                version: HttpVersion::ERR,
+            }
+        });
+        HttpRequest {
+            io_reader,
+            buf,
+            headers: None,
+            request_line,
         }
     }
 
@@ -69,6 +79,7 @@ impl<R: AsyncRead + Unpin + 'static> NotParsedHttpRequest<R> {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HttpMethod {
     GET,
     POST,
@@ -79,12 +90,14 @@ pub enum HttpMethod {
     PATCH,
     TRACE,
     CONNECT,
+    ERR,
 }
 
 pub enum HttpVersion {
     HTTP10,
     HTTP11,
     HTTP20,
+    ERR,
 }
 
 pub struct HttpRequestLine {
@@ -99,17 +112,17 @@ impl HttpRequestLine {
         buf: &mut Vec<u8>,
     ) -> Result<HttpRequestLine, RouterError> {
         let start = buf.len();
-        let n = reader.read_until(b'\n', buf).await.map_err(|_| {
-            RouterError::HttpErrorCodeWithMessage(
-                crate::http::code::HttpStatusCode::BadRequest,
+        let n = reader.read_until(b'\n', buf).await.map_err(|e| {
+            RouterError::InvalidHttpRequest(
+                start..buf.len(),
                 "Failed to read request line".to_string(),
             )
         })?;
 
         if n == 0 {
-            return Err(RouterError::HttpErrorCodeWithMessage(
-                crate::http::code::HttpStatusCode::BadRequest,
-                "Unexpected EOF while reading request line".to_string(),
+            return Err(RouterError::InvalidHttpRequest(
+                start..buf.len(),
+                "Empty request line".to_string(),
             ));
         }
 
@@ -126,8 +139,8 @@ impl HttpRequestLine {
 
         let (raw_method, raw_path, raw_version, path_range) = {
             let sp1 = line.iter().position(|&b| b == b' ').ok_or_else(|| {
-                RouterError::HttpErrorCodeWithMessage(
-                    crate::http::code::HttpStatusCode::BadRequest,
+                RouterError::InvalidHttpRequest(
+                    start..line_end,
                     "Invalid request line format".to_string(),
                 )
             })?;
@@ -135,8 +148,8 @@ impl HttpRequestLine {
                 .iter()
                 .position(|&b| b == b' ')
                 .ok_or_else(|| {
-                    RouterError::HttpErrorCodeWithMessage(
-                        crate::http::code::HttpStatusCode::BadRequest,
+                    RouterError::InvalidHttpRequest(
+                        start..line_end,
                         "Invalid request line format".to_string(),
                     )
                 })?;
@@ -160,16 +173,16 @@ impl HttpRequestLine {
             b"TRACE" => HttpMethod::TRACE,
             b"CONNECT" => HttpMethod::CONNECT,
             _ => {
-                return Err(RouterError::HttpErrorCodeWithMessage(
-                    crate::http::code::HttpStatusCode::BadRequest,
+                return Err(RouterError::InvalidHttpRequest(
+                    start..line_end,
                     "Unsupported HTTP method".to_string(),
                 ))
             }
         };
 
         if raw_path.is_empty() {
-            return Err(RouterError::HttpErrorCodeWithMessage(
-                crate::http::code::HttpStatusCode::BadRequest,
+            return Err(RouterError::InvalidHttpRequest(
+                start..line_end,
                 "Invalid request line format".to_string(),
             ));
         }
@@ -179,8 +192,8 @@ impl HttpRequestLine {
             b"HTTP/1.1" => HttpVersion::HTTP11,
             b"HTTP/2.0" => HttpVersion::HTTP20,
             _ => {
-                return Err(RouterError::HttpErrorCodeWithMessage(
-                    crate::http::code::HttpStatusCode::BadRequest,
+                return Err(RouterError::InvalidHttpRequest(
+                    start..line_end,
                     "Unsupported HTTP version".to_string(),
                 ))
             }

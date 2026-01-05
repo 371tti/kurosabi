@@ -1,6 +1,6 @@
 use futures::{AsyncRead, AsyncWrite};
 
-use crate::{connection::Connection, error::RouterError, http::{request::NotParsedHttpRequest, response::HttpResponse}};
+use crate::{connection::Connection, error::RouterError, http::{request::{HttpRequest, NotParsedHttpRequest}, response::HttpResponse}};
 
 pub trait Router<C, R, W>: Send + Sync + 'static
 where
@@ -8,10 +8,9 @@ where
     W: AsyncWrite + Unpin + Send + 'static,
 {
     type Fut: Future<Output = Connection<C, R, W>> + Send;
-    type VoidFut: Future<Output = ()> + Send;
 
     fn router(&self, conn: Connection<C, R, W>) -> Self::Fut;
-    fn invalid_http(&self, err: RouterError, res: HttpResponse<W>) -> Self::VoidFut;
+    fn invalid_http(&self, conn: Connection<C, R, W>) -> Self::Fut;
 }
 
 pub trait AsyncInit {
@@ -46,20 +45,21 @@ where
     {
         let res = HttpResponse::new(writer);
         let not_parsed_req = NotParsedHttpRequest::new(reader);
-        match not_parsed_req.parse_request().await {
-            Ok(r) => {
-                let conn = Connection {
-                    c: self.context.clone(),
-                    req: r,
-                    res,
-                };
-                self.router.router(conn).await
-            }
-            Err(e) => {
-                // invalid_httpを呼び出してからpanicさせる
-                self.router.invalid_http(e, res).await;
-                
-            }
+        let req = HttpRequest::new(reader).await;
+        if req.method() == &crate::http::request::HttpMethod::ERR {
+            let conn = Connection {
+                c: self.context.clone(),
+                req: not_parsed_req,
+                res,
+            };
+            self.router.invalid_http(conn).await
+        } else {
+            let conn = Connection {
+                c: self.context.clone(),
+                req,
+                res,
+            };
+            self.router.router(conn).await
         }
     }
 }

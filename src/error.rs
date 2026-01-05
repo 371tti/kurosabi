@@ -1,5 +1,6 @@
 use std::fmt;
 use std::error::Error;
+use std::ops::Range;
 
 use crate::http::code::HttpStatusCode;
 
@@ -7,6 +8,7 @@ use crate::http::code::HttpStatusCode;
 pub enum RouterError {
     HttpErrorCode(HttpStatusCode),
     HttpErrorCodeWithMessage(HttpStatusCode, String),
+    InvalidHttpRequest(Range<usize>, String),
 }
 
 impl fmt::Display for RouterError {
@@ -17,6 +19,9 @@ impl fmt::Display for RouterError {
             }
             RouterError::HttpErrorCodeWithMessage(code, msg) => {
                 write!(f, "RouterError: HTTP Error Code {} - {}", *code as u16, msg)
+            }
+            RouterError::InvalidHttpRequest(range, msg) => {
+                write!(f, "RouterError: Invalid HTTP Request at {:?} - {}", range, msg)
             }
         }
     }
