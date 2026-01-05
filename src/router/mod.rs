@@ -1,6 +1,6 @@
 use futures::{AsyncRead, AsyncWrite};
 
-use crate::{connection::Connection, error::RouterError, http::{request::{HttpRequest, NotParsedHttpRequest}, response::HttpResponse}};
+use crate::{connection::Connection, http::{request::{HttpRequest}, response::HttpResponse}};
 
 pub trait Router<C, R, W>: Send + Sync + 'static
 where
@@ -14,6 +14,7 @@ where
 }
 
 pub trait AsyncInit {
+
     async fn init() -> Self;
 }
 
@@ -34,22 +35,19 @@ impl<D, C: Clone> KurosabiRouter<D, C> {
     }
 }
 
-impl<D, C: Clone> KurosabiRouter<D, C>
-where
-    D: Router<C, R, W>,
-{
+impl<D, C: Clone> KurosabiRouter<D, C> {
     pub async fn routing<R, W>(&self, reader: R, writer: W) -> Connection<C, R, W>
     where
+        D: Router<C, R, W>,
         R: AsyncRead + Unpin + Send + 'static,
         W: AsyncWrite + Unpin + Send + 'static,
     {
         let res = HttpResponse::new(writer);
-        let not_parsed_req = NotParsedHttpRequest::new(reader);
         let req = HttpRequest::new(reader).await;
         if req.method() == &crate::http::request::HttpMethod::ERR {
             let conn = Connection {
                 c: self.context.clone(),
-                req: not_parsed_req,
+                req,
                 res,
             };
             self.router.invalid_http(conn).await
