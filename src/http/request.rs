@@ -1,6 +1,3 @@
-
-
-
 use std::ops::Range;
 
 use futures::{AsyncBufRead, AsyncRead, io::BufReader, AsyncBufReadExt};
@@ -13,19 +10,10 @@ pub struct HttpRequest<R: AsyncRead + Unpin + 'static> {
     /// headers のライフタイムは 'static 
     /// つまりbufと同じ
     headers: Option<HttpHeader>,
-    request_line: Option<HttpRequestLine>,
+    request_line: HttpRequestLine,
 }
 
 impl<R: AsyncRead + Unpin + 'static> HttpRequest<R> {
-    pub fn new(io_reader: R) -> Self {
-        HttpRequest {
-            io_reader: BufReader::new(io_reader),
-            buf: Vec::new(),
-            headers: None,
-            request_line: None,
-        }
-    }
-
     pub async fn header_get<S>(&mut self, key: S) -> Result<Option<&str>, RouterError>
     where S: std::borrow::Borrow<str>, {
         if self.headers.is_none() {
@@ -40,13 +28,44 @@ impl<R: AsyncRead + Unpin + 'static> HttpRequest<R> {
         }
         Ok(self.headers.as_ref().expect("unreachable").get(key, &self.buf).map(|v| std::str::from_utf8(v).ok()).flatten())
     }
+
+    pub fn path_full(&self) -> &str {
+        let path_range = &self.request_line.path;
+        std::str::from_utf8(&self.buf[path_range.clone()]).expect("Invalid UTF-8 in request path")
+    }
+
+    pub fn method(&self) -> &HttpMethod {
+        &self.request_line.method
+    }
+    
+    pub fn version(&self) -> &HttpVersion {
+        &self.request_line.version
+    }
 }
 
-impl<R: AsyncRead + Unpin + 'static> HttpRequest<R> {
-    async fn parse_request(&mut self) -> Result<(), RouterError> {
+pub struct NotParsedHttpRequest<R: AsyncRead + Unpin + 'static> {
+    io_reader: BufReader<R>,
+    buf: Vec<u8>,
+}
+
+impl<R: AsyncRead + Unpin + 'static> NotParsedHttpRequest<R> {
+    pub fn new(io_reader: R) -> Self {
+        NotParsedHttpRequest {
+            io_reader: BufReader::new(io_reader),
+            buf: Vec::new(),
+        }
+    }
+
+    pub async fn parse_request(mut self) -> Result<HttpRequest<R>, RouterError> {
         let request_line = HttpRequestLine::parse_async(&mut self.io_reader, &mut self.buf).await?;
-        self.request_line = Some(request_line);
-        Ok(())
+        Ok(
+            HttpRequest {
+                io_reader: self.io_reader,
+                buf: self.buf,
+                headers: None,
+                request_line,
+            }
+        )
     }
 }
 
