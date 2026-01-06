@@ -11,4 +11,5 @@ readme = "README.md"
 [dependencies]
 futures = "0.3"
 
+async-std = { version = "1.12", features = ["attributes"] }
 

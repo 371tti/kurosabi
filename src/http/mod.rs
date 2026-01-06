@@ -3,3 +3,5 @@ pub mod request;
 pub mod response;
 pub mod header;
 pub mod code;
+pub mod version;
+pub mod method;

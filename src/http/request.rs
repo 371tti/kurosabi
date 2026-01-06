@@ -2,7 +2,7 @@ use std::ops::Range;
 
 use futures::{AsyncBufRead, AsyncRead, io::BufReader, AsyncBufReadExt};
 
-use crate::{error::RouterError, http::header::HttpHeader};
+use crate::{error::RouterError, http::{header::HttpHeader, method::HttpMethod, version::HttpVersion}};
 
 pub struct HttpRequest<R: AsyncRead + Unpin + 'static> {
     io_reader: BufReader<R>,
@@ -79,27 +79,6 @@ impl<R: AsyncRead + Unpin + 'static> HttpRequest<R> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum HttpMethod {
-    GET,
-    POST,
-    PUT,
-    DELETE,
-    HEAD,
-    OPTIONS,
-    PATCH,
-    TRACE,
-    CONNECT,
-    ERR,
-}
-
-pub enum HttpVersion {
-    HTTP10,
-    HTTP11,
-    HTTP20,
-    ERR,
-}
-
 pub struct HttpRequestLine {
     method: HttpMethod,
     path: Range<usize>,
@@ -112,7 +91,7 @@ impl HttpRequestLine {
         buf: &mut Vec<u8>,
     ) -> Result<HttpRequestLine, RouterError> {
         let start = buf.len();
-        let n = reader.read_until(b'\n', buf).await.map_err(|e| {
+        let n = reader.read_until(b'\n', buf).await.map_err(|_| {
             RouterError::InvalidHttpRequest(
                 start..buf.len(),
                 "Failed to read request line".to_string(),

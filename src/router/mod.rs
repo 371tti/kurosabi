@@ -1,73 +1,64 @@
 use futures::{AsyncRead, AsyncWrite};
 
-use crate::{connection::Connection, http::{request::{HttpRequest}, response::HttpResponse}};
+use crate::{connection::{CompletedResponse, Connection, ConnectionState, ResponseReadyToSend}, error::Result, http::{method::HttpMethod, request::HttpRequest, response::HttpResponse}, router};
 
-pub trait Router<C, R, W>: Send + Sync + 'static
+pub trait Router<C, R, W, S>: Send + Sync + 'static
 where
     R: AsyncRead + Unpin + Send + 'static,
     W: AsyncWrite + Unpin + Send + 'static,
+    S: ConnectionState,
+    C: Send
 {
-    type Fut: Future<Output = Connection<C, R, W>> + Send;
-
-    fn router(&self, conn: Connection<C, R, W>) -> Self::Fut;
-    fn invalid_http(&self, conn: Connection<C, R, W>) -> Self::Fut;
+    fn router(&self, conn: Connection<C, R, W>) -> impl Future<Output = Connection<C, R, W, ResponseReadyToSend>> + Send;
+    fn invalid_http(&self, conn: Connection<C, R, W>) -> impl Future<Output = Connection<C, R, W, ResponseReadyToSend>> + Send {
+        async move { conn.text_body("HELLO") }
+    }
 }
 
-pub trait AsyncInit {
-
-    async fn init() -> Self;
-}
-
-pub struct KurosabiRouter<D, C: Clone = DefaultContext> {
+#[derive(Clone)]
+pub struct KurosabiRouter<D, C: Clone + Send = DefaultContext> {
     context: C,
     router: D,
 }
 
-impl<D: AsyncInit, C: Clone> KurosabiRouter<D, C> {
-    pub async fn new(context: C) -> Self {
-        Self { context, router: D::init().await }
+impl<D> KurosabiRouter<D, DefaultContext> {
+    pub fn new(router: D) -> Self {
+        Self { context: DefaultContext::default(), router }
     }
 }
 
-impl<D, C: Clone> KurosabiRouter<D, C> {
+impl<D, C: Clone + Send> KurosabiRouter<D, C> {
     pub fn with_context(router: D, context: C) -> Self {
         KurosabiRouter { context, router }
     }
 }
 
-impl<D, C: Clone> KurosabiRouter<D, C> {
-    pub async fn routing<R, W>(&self, reader: R, writer: W) -> Connection<C, R, W>
+impl<D, C: Clone + Send> KurosabiRouter<D, C> {
+    pub async fn routing<R, W>(&self, reader: R, writer: W) -> Result<Connection<C, R, W, CompletedResponse>>
     where
-        D: Router<C, R, W>,
+        D: Router<C, R, W, ResponseReadyToSend>,
         R: AsyncRead + Unpin + Send + 'static,
         W: AsyncWrite + Unpin + Send + 'static,
     {
         let res = HttpResponse::new(writer);
         let req = HttpRequest::new(reader).await;
-        if req.method() == &crate::http::request::HttpMethod::ERR {
-            let conn = Connection {
-                c: self.context.clone(),
+        if req.method() == &HttpMethod::ERR {
+            let conn = Connection::new(
+                self.context.clone(),
                 req,
                 res,
-            };
-            self.router.invalid_http(conn).await
+            );
+            self.router.invalid_http(conn).await.flush().await
         } else {
-            let conn = Connection {
-                c: self.context.clone(),
+            let conn = Connection::new(
+                self.context.clone(),
                 req,
                 res,
-            };
-            self.router.router(conn).await
+            );
+            self.router.router(conn).await.flush().await
         }
     }
 }
 
 #[derive(Clone, Default)]
 pub struct DefaultContext {}
-
-impl AsyncInit for DefaultContext {
-    async fn init() -> Self {
-        DefaultContext {}
-    }
-}
-
