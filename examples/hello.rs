@@ -4,7 +4,7 @@ use std::io::Result;
 use async_std::net::TcpListener;
 use async_std::task;
 
-use kurosabi::router::{KurosabiRouter, Router}; // あなたのパスに合わせて
+use kurosabi::router::{KurosabiRouter, Router};
 
 #[async_std::main]
 async fn main() -> Result<()> {
@@ -13,7 +13,6 @@ async fn main() -> Result<()> {
 
     let router = MyRouter;
 
-    // Router 本体（D: Default を使うなら D::default() が必要）
     let router = KurosabiRouter::new(router);
 
     loop {
@@ -24,7 +23,6 @@ async fn main() -> Result<()> {
             let reader = stream.clone();
             let writer = stream;
 
-            // ここであなたの routing を呼ぶだけ
             let r = router_ref.routing(reader, writer).await;
 
             if let Err(e) = r {
@@ -34,7 +32,6 @@ async fn main() -> Result<()> {
     }
 }
 
-// ↓ 仮の Router 実装（後述）
 #[derive(Default, Clone)]
 struct MyRouter;
 
@@ -50,9 +47,12 @@ impl<
 
     async fn router(&self, conn: Connection<C, R, W>) -> Connection<C, R, W, ResponseReadyToSend> {
         match conn.req.path_full() {
-            _ => {
-                conn.text_body("hello world")
+            "/" => {
+                conn.set_status_code(200u16).text_body("hello world")
             } 
+            _ => {
+                conn.set_status_code(404u16).text_body("not found")
+            }
         }
     }
 }
