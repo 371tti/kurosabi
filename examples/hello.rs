@@ -20,13 +20,26 @@ async fn main() -> Result<()> {
         let router_ref = router.clone();
 
         task::spawn(async move {
-            let reader = stream.clone();
-            let writer = stream;
+            let stream = stream;
+            loop {
+                let (reader, writer) = (stream.clone(), stream.clone());
+                let r = router_ref.routing(reader, writer).await;
 
-            let r = router_ref.routing(reader, writer).await;
-
-            if let Err(e) = r {
-                eprintln!("Error handling connection from {}: {:?}", addr, e.router_error);
+                match r {
+                    Ok(mut conn) => {
+                        if let Some(v) = conn.req.header_get("Keep-Alive").await {
+                            if v == "close" {
+                                break;
+                            }
+                        } else {
+                            break;
+                        }
+                    },
+                    Err(e) => {
+                        eprintln!("Connection error from {}: {:?}", addr, e.router_error);
+                        break;
+                    }
+                }
             }
         });
     }
@@ -50,6 +63,7 @@ impl<
             "/" => {
                 conn.set_status_code(200u16).text_body("hello world")
             } 
+            
             _ => {
                 conn.set_status_code(404u16).text_body("not found")
             }

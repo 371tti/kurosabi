@@ -2,31 +2,21 @@ use std::ops::Range;
 
 use futures::{AsyncBufRead, AsyncRead, io::BufReader, AsyncBufReadExt};
 
-use crate::{error::RouterError, http::{header::HttpHeader, method::HttpMethod, version::HttpVersion}};
+use crate::{error::RouterError, http::{header::{HttpHeader}, method::HttpMethod, version::HttpVersion}};
 
 pub struct HttpRequest<R: AsyncRead + Unpin + 'static> {
     io_reader: BufReader<R>,
     buf: Vec<u8>,
     /// headers のライフタイムは 'static 
     /// つまりbufと同じ
-    headers: Option<HttpHeader>,
+    headers: HttpHeader,
     request_line: HttpRequestLine,
 }
 
 impl<R: AsyncRead + Unpin + 'static> HttpRequest<R> {
-    pub async fn header_get<S>(&mut self, key: S) -> Result<Option<&str>, RouterError>
+    pub async fn header_get<S>(&mut self, key: S) -> Option<&str>
     where S: std::borrow::Borrow<str>, {
-        if self.headers.is_none() {
-            if let Some(headers) = HttpHeader::parse_async(&mut self.io_reader, &mut self.buf).await {
-                self.headers = Some(headers);
-            } else {
-                return Err(RouterError::HttpErrorCodeWithMessage(
-                    crate::http::code::HttpStatusCode::BadRequest,
-                    "Failed to parse HTTP headers".to_string(),
-                ));
-            }
-        }
-        Ok(self.headers.as_ref().expect("unreachable").get(key, &self.buf).map(|v| std::str::from_utf8(v).ok()).flatten())
+        std::str::from_utf8(self.headers.get(key, &self.buf)?).ok()
     }
 
     pub fn path_full(&self) -> &str {
@@ -44,38 +34,48 @@ impl<R: AsyncRead + Unpin + 'static> HttpRequest<R> {
 }
 
 impl<R: AsyncRead + Unpin + 'static> HttpRequest<R> {
-    pub async fn new(io_reader: R) -> Self {
+    pub async fn new(io_reader: R) -> Result<HttpRequest<R>, HttpRequest<R>> {
         let mut buf = Vec::new();
         let mut io_reader = BufReader::new(io_reader);
-        let request_line = HttpRequestLine::parse_async(&mut io_reader, &mut buf).await.unwrap_or_else(|e| {
-            HttpRequestLine {
-                method: HttpMethod::ERR,
-                path: if let RouterError::InvalidHttpRequest(range, _) = e {
-                    range
-                } else {
-                    0..0
-                },
-                version: HttpVersion::ERR,
+        let request_line = match HttpRequestLine::parse_async(&mut io_reader, &mut buf).await {
+            Ok(line) => line,
+            Err(e) => {
+                let line = HttpRequestLine {
+                    method: HttpMethod::ERR,
+                    path: if let RouterError::InvalidHttpRequest(range, _) = e {
+                        range
+                    } else {
+                        0..0
+                    },
+                    version: HttpVersion::ERR,
+                };
+                return Err(HttpRequest {
+                    io_reader,
+                    buf,
+                    headers: HttpHeader::new(),
+                    request_line: line,
+                });
             }
-        });
-        HttpRequest {
-            io_reader,
-            buf,
-            headers: None,
-            request_line,
-        }
-    }
-
-    pub async fn parse_request(mut self) -> Result<HttpRequest<R>, RouterError> {
-        let request_line = HttpRequestLine::parse_async(&mut self.io_reader, &mut self.buf).await?;
+        };
         Ok(
             HttpRequest {
-                io_reader: self.io_reader,
-                buf: self.buf,
-                headers: None,
+                io_reader,
+                buf,
+                headers: HttpHeader::new(),
                 request_line,
             }
         )
+    }
+
+    pub async fn parse_request(mut self) -> Result<HttpRequest<R>, HttpRequest<R>> {
+        let headers = match HttpHeader::parse_async(&mut self.io_reader, &mut self.buf).await {
+            Some(headers) => headers,
+            None => {
+                return Err(self);
+            }
+        };
+        self.headers = headers;
+        Ok(self)
     }
 }
 
@@ -86,6 +86,14 @@ pub struct HttpRequestLine {
 }
 
 impl HttpRequestLine {
+    pub fn new() -> Self {
+        HttpRequestLine {
+            method: HttpMethod::ERR,
+            path: 0..0,
+            version: HttpVersion::ERR,
+        }
+    }
+
     pub async fn parse_async<R: AsyncBufRead + Unpin + 'static>(
         reader: &mut R,
         buf: &mut Vec<u8>,

@@ -41,22 +41,35 @@ impl<D, C: Clone + Send> KurosabiRouter<D, C> {
         W: AsyncWrite + Unpin + Send + 'static,
     {
         let res = HttpResponse::new(writer);
-        let req = HttpRequest::new(reader).await;
-        if req.method() == &HttpMethod::ERR {
-            let conn = Connection::new(
-                self.context.clone(),
-                req,
-                res,
-            );
-            self.router.invalid_http(conn).await.flush().await
-        } else {
-            let conn = Connection::new(
-                self.context.clone(),
-                req,
-                res,
-            );
-            self.router.router(conn).await.flush().await
-        }
+        let req_uf = match HttpRequest::new(reader).await {
+            Ok(req) => req,
+            Err(req_err) => {
+                let conn = Connection::new(
+                    self.context.clone(),
+                    req_err,
+                    res,
+                );
+                return self.router.invalid_http(conn).await.flush().await
+            }
+        };
+        let req = req_uf.parse_request().await;
+        let req = match req {
+            Ok(r) => r,
+            Err(r_err) => {
+                let conn = Connection::new(
+                    self.context.clone(),
+                    r_err,
+                    res,
+                );
+                return self.router.invalid_http(conn).await.flush().await
+            }
+        };
+        let conn = Connection::new(
+            self.context.clone(),
+            req,
+            res,
+        );
+        self.router.router(conn).await.flush().await
     }
 }
 
