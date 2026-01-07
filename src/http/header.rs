@@ -76,7 +76,7 @@ impl HttpHeader {
     where S: Borrow<str>, {
         let key_bytes = key.borrow().as_bytes();
         for h in &self.headers {
-            if slice_by_range(buf, &h.key) == key_bytes {
+            if slice_by_range(buf, &h.key).eq_ignore_ascii_case(key_bytes) {
                 return Some(slice_by_range(buf, &h.value));
             }
         }
@@ -106,7 +106,7 @@ impl HttpHeader {
 
             let is_match = {
                 let buf_slice = buf.as_slice();
-                slice_by_range(buf_slice, &h.key) == key_bytes
+                slice_by_range(buf_slice, &h.key).eq_ignore_ascii_case(key_bytes)
             };
 
             if is_match {

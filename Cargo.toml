@@ -12,4 +12,5 @@ readme = "README.md"
 futures = "0.3"
 
 async-std = { version = "1.12", features = ["attributes"] }
+futures-timer = "3.0.3"
 

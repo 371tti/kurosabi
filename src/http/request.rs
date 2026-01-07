@@ -31,13 +31,24 @@ impl<R: AsyncRead + Unpin + 'static> HttpRequest<R> {
     pub fn version(&self) -> &HttpVersion {
         &self.request_line.version
     }
+
+    pub(crate) fn into_reader(self) -> R {
+        self.io_reader.into_inner()
+    }
 }
 
 impl<R: AsyncRead + Unpin + 'static> HttpRequest<R> {
-    pub async fn new(io_reader: R) -> Result<HttpRequest<R>, HttpRequest<R>> {
-        let mut buf = Vec::new();
-        let mut io_reader = BufReader::new(io_reader);
-        let request_line = match HttpRequestLine::parse_async(&mut io_reader, &mut buf).await {
+    pub fn new(io_reader: R) -> Self {
+        HttpRequest {
+            io_reader: BufReader::new(io_reader),
+            buf: Vec::with_capacity(64),
+            headers: HttpHeader::new(),
+            request_line: HttpRequestLine::new(),
+        }
+    }
+
+    pub async fn parse_request_line(mut self) -> Result<HttpRequest<R>, HttpRequest<R>> {
+        let request_line = match HttpRequestLine::parse_async(&mut self.io_reader, &mut self.buf).await {
             Ok(line) => line,
             Err(e) => {
                 let line = HttpRequestLine {
@@ -50,8 +61,8 @@ impl<R: AsyncRead + Unpin + 'static> HttpRequest<R> {
                     version: HttpVersion::ERR,
                 };
                 return Err(HttpRequest {
-                    io_reader,
-                    buf,
+                    io_reader: self.io_reader,
+                    buf: self.buf,
                     headers: HttpHeader::new(),
                     request_line: line,
                 });
@@ -59,9 +70,9 @@ impl<R: AsyncRead + Unpin + 'static> HttpRequest<R> {
         };
         Ok(
             HttpRequest {
-                io_reader,
-                buf,
-                headers: HttpHeader::new(),
+                io_reader: self.io_reader,
+                buf: self.buf,
+                headers: self.headers,
                 request_line,
             }
         )

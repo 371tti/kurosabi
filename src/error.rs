@@ -10,6 +10,8 @@ pub enum RouterError {
     HttpErrorCodeWithMessage(HttpStatusCode, String),
     InvalidHttpRequest(Range<usize>, String),
     IoError(std::io::Error),
+    Timeout,
+    KeepAliveTimeout,
 }
 
 impl fmt::Display for RouterError {
@@ -27,15 +29,20 @@ impl fmt::Display for RouterError {
             RouterError::IoError(e) => {
                 write!(f, "RouterError: IO Error - {}", e)
             }
+            RouterError::Timeout => {
+                write!(f, "RouterError: Timeout Error")
+            }
+            RouterError::KeepAliveTimeout => {
+                write!(f, "RouterError: Keep-Alive Timeout Error")
+            }
         }
     }
 }
 
 impl Error for RouterError {}
 
-pub type Result<T> = std::result::Result<T, ErrorPare<T>>;
+pub type ConnectionResult<T> = std::result::Result<T, ErrorPare<T>>;
 pub struct ErrorPare<T> {
     pub router_error: RouterError,
     pub connection: T,
 }
-

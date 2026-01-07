@@ -1,6 +1,6 @@
 use futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
-use crate::{error::{ErrorPare, Result, RouterError}, http::{code::HttpStatusCode, request::HttpRequest, response::HttpResponse}};
+use crate::{error::{ErrorPare, ConnectionResult, RouterError}, http::{code::HttpStatusCode, request::HttpRequest, response::HttpResponse}};
 
 /// Connection struct
 /// one http connection per one instance
@@ -9,7 +9,7 @@ pub struct Connection<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin +
     pub req: HttpRequest<R>,
     pub res: HttpResponse<W>,
     /// State
-    phantom: std::marker::PhantomData<S>,
+    pub phantom: std::marker::PhantomData<S>,
 }
 
 pub trait ConnectionState {}
@@ -87,7 +87,7 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
         }
     }
 
-    pub async fn streaming<T>(mut self, mut reader: T) -> Result<Connection<C, R, W, ResponseReadyToSend>>
+    pub async fn streaming<T>(mut self, mut reader: T) -> ConnectionResult<Connection<C, R, W, ResponseReadyToSend>>
     where
         T: SizedAsyncRead + Send,
     {
@@ -143,7 +143,7 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
         })
     }
 
-    pub async fn ready_chunked(mut self) -> Result<Connection<C, R, W, ChunkedResponse>> {
+    pub async fn ready_chunked(mut self) -> ConnectionResult<Connection<C, R, W, ChunkedResponse>> {
         self.res.header_add("Transfer-Encoding", "chunked");
         self.res.response_line_write();
         self.res.start_content();
@@ -196,7 +196,7 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
 }
 
 impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connection<C, R, W, ResponseReadyToSend> {
-    pub(crate) async fn flush(mut self) -> Result<Connection<C, R, W, CompletedResponse>> {
+    pub(crate) async fn flush(mut self) -> ConnectionResult<Connection<C, R, W, NoneBody>> {
         if self.res.is_flushed() {
             return Ok(Connection {
                 c: self.c,
