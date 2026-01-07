@@ -1,5 +1,5 @@
-use std::fmt;
 use std::error::Error;
+use std::fmt;
 use std::ops::Range;
 
 use crate::http::code::HttpStatusCode;
@@ -24,7 +24,11 @@ impl fmt::Display for RouterError {
                 write!(f, "RouterError: HTTP Error Code {} - {}", *code as u16, msg)
             }
             RouterError::InvalidHttpRequest(range, msg) => {
-                write!(f, "RouterError: Invalid HTTP Request at {:?} - {}", range, msg)
+                write!(
+                    f,
+                    "RouterError: Invalid HTTP Request at {:?} - {}",
+                    range, msg
+                )
             }
             RouterError::IoError(e) => {
                 write!(f, "RouterError: IO Error - {}", e)

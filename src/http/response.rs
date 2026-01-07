@@ -1,4 +1,5 @@
-use futures::{AsyncWrite, AsyncWriteExt};
+use futures_io::AsyncWrite;
+use futures_util::AsyncWriteExt;
 
 use crate::http::{code::HttpStatusCode, header::HttpHeader, version::HttpVersion};
 
@@ -116,8 +117,8 @@ impl<W: AsyncWrite + Unpin + 'static> HttpResponse<W> {
 
     /// set http status code
     pub(crate) fn set_status_code<T>(&mut self, status_code: T) -> &mut Self
-    where 
-        T: Into<u16>, 
+    where
+        T: Into<u16>,
     {
         self.response_line.status_code = HttpStatusCode::from(status_code.into());
         self
@@ -133,7 +134,7 @@ pub struct HttpResponseLine {
 impl HttpResponseLine {
     pub fn new() -> Self {
         HttpResponseLine {
-            version: HttpVersion::ERR,
+            version: HttpVersion::HTTP11,
             status_code: HttpStatusCode::InternalServerError,
         }
     }

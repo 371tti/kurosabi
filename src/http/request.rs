@@ -1,13 +1,17 @@
 use std::ops::Range;
 
-use futures::{AsyncBufRead, AsyncRead, io::BufReader, AsyncBufReadExt};
+use futures_io::{AsyncBufRead, AsyncRead};
+use futures_util::{AsyncBufReadExt, io::BufReader};
 
-use crate::{error::RouterError, http::{header::{HttpHeader}, method::HttpMethod, version::HttpVersion}};
+use crate::{
+    error::RouterError,
+    http::{header::HttpHeader, method::HttpMethod, version::HttpVersion},
+};
 
 pub struct HttpRequest<R: AsyncRead + Unpin + 'static> {
     io_reader: BufReader<R>,
     buf: Vec<u8>,
-    /// headers のライフタイムは 'static 
+    /// headers のライフタイムは 'static
     /// つまりbufと同じ
     headers: HttpHeader,
     request_line: HttpRequestLine,
@@ -15,7 +19,9 @@ pub struct HttpRequest<R: AsyncRead + Unpin + 'static> {
 
 impl<R: AsyncRead + Unpin + 'static> HttpRequest<R> {
     pub async fn header_get<S>(&mut self, key: S) -> Option<&str>
-    where S: std::borrow::Borrow<str>, {
+    where
+        S: std::borrow::Borrow<str>,
+    {
         std::str::from_utf8(self.headers.get(key, &self.buf)?).ok()
     }
 
@@ -27,7 +33,7 @@ impl<R: AsyncRead + Unpin + 'static> HttpRequest<R> {
     pub fn method(&self) -> &HttpMethod {
         &self.request_line.method
     }
-    
+
     pub fn version(&self) -> &HttpVersion {
         &self.request_line.version
     }
@@ -48,34 +54,33 @@ impl<R: AsyncRead + Unpin + 'static> HttpRequest<R> {
     }
 
     pub async fn parse_request_line(mut self) -> Result<HttpRequest<R>, HttpRequest<R>> {
-        let request_line = match HttpRequestLine::parse_async(&mut self.io_reader, &mut self.buf).await {
-            Ok(line) => line,
-            Err(e) => {
-                let line = HttpRequestLine {
-                    method: HttpMethod::ERR,
-                    path: if let RouterError::InvalidHttpRequest(range, _) = e {
-                        range
-                    } else {
-                        0..0
-                    },
-                    version: HttpVersion::ERR,
-                };
-                return Err(HttpRequest {
-                    io_reader: self.io_reader,
-                    buf: self.buf,
-                    headers: HttpHeader::new(),
-                    request_line: line,
-                });
-            }
-        };
-        Ok(
-            HttpRequest {
-                io_reader: self.io_reader,
-                buf: self.buf,
-                headers: self.headers,
-                request_line,
-            }
-        )
+        let request_line =
+            match HttpRequestLine::parse_async(&mut self.io_reader, &mut self.buf).await {
+                Ok(line) => line,
+                Err(e) => {
+                    let line = HttpRequestLine {
+                        method: HttpMethod::ERR,
+                        path: if let RouterError::InvalidHttpRequest(range, _) = e {
+                            range
+                        } else {
+                            0..0
+                        },
+                        version: HttpVersion::ERR,
+                    };
+                    return Err(HttpRequest {
+                        io_reader: self.io_reader,
+                        buf: self.buf,
+                        headers: HttpHeader::new(),
+                        request_line: line,
+                    });
+                }
+            };
+        Ok(HttpRequest {
+            io_reader: self.io_reader,
+            buf: self.buf,
+            headers: self.headers,
+            request_line,
+        })
     }
 
     pub async fn parse_request(mut self) -> Result<HttpRequest<R>, HttpRequest<R>> {
@@ -174,7 +179,7 @@ impl HttpRequestLine {
                 return Err(RouterError::InvalidHttpRequest(
                     start..line_end,
                     "Unsupported HTTP method".to_string(),
-                ))
+                ));
             }
         };
 
@@ -193,7 +198,7 @@ impl HttpRequestLine {
                 return Err(RouterError::InvalidHttpRequest(
                     start..line_end,
                     "Unsupported HTTP version".to_string(),
-                ))
+                ));
             }
         };
 

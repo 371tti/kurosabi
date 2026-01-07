@@ -9,8 +9,7 @@ repository = "https://github.com/371tti/kurosabi"
 readme = "README.md"
 
 [dependencies]
-futures = "0.3"
-
-async-std = { version = "1.12", features = ["attributes"] }
-futures-timer = "3.0.3"
-
+futures-core = { version = "0.3", default-features = false }
+futures-io   = { version = "0.3", default-features = false }
+futures-util = { version = "0.3", default-features = false, features = ["io"] }
+futures-timer = { version = "3.0.3", default-features = false }

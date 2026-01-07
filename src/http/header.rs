@@ -1,10 +1,10 @@
 use std::borrow::Borrow;
 use std::ops::Range;
 
-use futures::AsyncBufRead;
-use futures::io::AsyncBufReadExt;
 use std::string::String;
 
+use futures_io::AsyncBufRead;
+use futures_util::AsyncBufReadExt;
 
 pub fn slice_by_range<'a>(buf: &'a [u8], range: &Range<usize>) -> &'a [u8] {
     &buf[range.start..range.end]
@@ -19,7 +19,6 @@ fn trim_ascii_range(buf: &[u8], mut range: Range<usize>) -> Range<usize> {
     }
     range
 }
-
 
 pub struct HttpHeader {
     /// 線形探索のほうが高速な場合が多かったため
@@ -41,7 +40,9 @@ impl HttpHeader {
     }
 
     pub fn insert<K>(&mut self, key: K, value: String, buf: &mut Vec<u8>)
-    where K: Into<String>, {
+    where
+        K: Into<String>,
+    {
         let key_str = key.into();
         let value_str = value;
 
@@ -57,6 +58,7 @@ impl HttpHeader {
         buf.push(b':');
 
         let value_start = buf.len();
+        buf.push(b' ');
         buf.extend_from_slice(value_bytes);
         let value_end = buf.len();
 
@@ -73,7 +75,9 @@ impl HttpHeader {
     }
 
     pub fn get<'a, S>(&self, key: S, buf: &'a [u8]) -> Option<&'a [u8]>
-    where S: Borrow<str>, {
+    where
+        S: Borrow<str>,
+    {
         let key_bytes = key.borrow().as_bytes();
         for h in &self.headers {
             if slice_by_range(buf, &h.key).eq_ignore_ascii_case(key_bytes) {
@@ -84,7 +88,9 @@ impl HttpHeader {
     }
 
     pub fn remove<S>(&mut self, key: S, buf: &mut Vec<u8>)
-    where S: Borrow<str>, {
+    where
+        S: Borrow<str>,
+    {
         // 前提条件:
         // - self.headers の並びは buf 上の並びと一致（line.start が昇順）
         // - line Range 同士は非重複
@@ -133,15 +139,12 @@ impl HttpHeader {
 }
 
 impl HttpHeader {
-    pub async fn parse_async<R>(
-        reader: &mut R,
-        buf: &mut Vec<u8>,
-    ) -> Option<HttpHeader>
+    pub async fn parse_async<R>(reader: &mut R, buf: &mut Vec<u8>) -> Option<HttpHeader>
     where
-        R: AsyncBufRead + Unpin
+        R: AsyncBufRead + Unpin,
     {
         const MAX_HEADER_BYTES: usize = 32 * 1024; // 好みで調整
-        const MAX_HEADERS: usize = 128;            // 好みで調整
+        const MAX_HEADERS: usize = 128; // 好みで調整
 
         let mut header = HttpHeader::new();
 
@@ -254,7 +257,10 @@ mod tests {
         h.insert("C", "3".to_string(), &mut buf);
 
         assert_eq!(std::str::from_utf8(&buf).unwrap(), "A:1\r\nB:2\r\nC:3\r\n");
-        assert_eq!(header_lines(&h, &buf), vec!["A:1\r\n", "B:2\r\n", "C:3\r\n"]);
+        assert_eq!(
+            header_lines(&h, &buf),
+            vec!["A:1\r\n", "B:2\r\n", "C:3\r\n"]
+        );
 
         h.remove("B", &mut buf);
 

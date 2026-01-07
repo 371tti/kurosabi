@@ -1,10 +1,19 @@
-use futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use futures_io::{AsyncRead, AsyncWrite};
+use futures_util::{AsyncReadExt, AsyncWriteExt};
 
-use crate::{error::{ErrorPare, ConnectionResult, RouterError}, http::{code::HttpStatusCode, request::HttpRequest, response::HttpResponse}};
+use crate::{
+    error::{ConnectionResult, ErrorPare, RouterError},
+    http::{code::HttpStatusCode, request::HttpRequest, response::HttpResponse},
+};
 
 /// Connection struct
 /// one http connection per one instance
-pub struct Connection<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static, S: ConnectionState = NoneBody> {
+pub struct Connection<
+    C,
+    R: AsyncRead + Unpin + 'static,
+    W: AsyncWrite + Unpin + 'static,
+    S: ConnectionState = NoneBody,
+> {
     pub c: C,
     pub req: HttpRequest<R>,
     pub res: HttpResponse<W>,
@@ -32,7 +41,9 @@ pub trait SizedAsyncRead: AsyncRead + Unpin + 'static {
     fn size(&self) -> usize;
 }
 
-impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connection<C, R, W, NoneBody> {
+impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static>
+    Connection<C, R, W, NoneBody>
+{
     pub fn new(c: C, req: HttpRequest<R>, res: HttpResponse<W>) -> Self {
         Connection {
             c,
@@ -43,7 +54,9 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
     }
 }
 
-impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connection<C, R, W, NoneBody> {
+impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static>
+    Connection<C, R, W, NoneBody>
+{
     pub fn set_status_code<T>(mut self, status_code: T) -> Connection<C, R, W, StatusSetNoneBody>
     where
         T: Into<u16>,
@@ -66,7 +79,9 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
     }
 }
 
-impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connection<C, R, W, StatusSetNoneBody> {
+impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static>
+    Connection<C, R, W, StatusSetNoneBody>
+{
     pub fn text_body(mut self, body: &str) -> Connection<C, R, W, ResponseReadyToSend> {
         self.res.text_body(body);
         Connection {
@@ -87,7 +102,10 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
         }
     }
 
-    pub async fn streaming<T>(mut self, mut reader: T) -> ConnectionResult<Connection<C, R, W, ResponseReadyToSend>>
+    pub async fn streaming<T>(
+        mut self,
+        mut reader: T,
+    ) -> ConnectionResult<Connection<C, R, W, ResponseReadyToSend>>
     where
         T: SizedAsyncRead + Send,
     {
@@ -108,9 +126,7 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
                 let n = match n {
                     Ok(0) => break Ok(()), // EOF
                     Ok(n) => n,
-                    Err(e) => {
-                        break Err(e)
-                    }
+                    Err(e) => break Err(e),
                 };
                 let res = writer.write_all(&buf[..n]).await;
                 if let Err(e) = res {
@@ -172,10 +188,15 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
     }
 }
 
-impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connection<C, R, W, ChunkedResponse> {
+impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static>
+    Connection<C, R, W, ChunkedResponse>
+{
     pub async fn send_chunk(&mut self, chunk: &[u8]) -> std::io::Result<()> {
         let chunk_size_hex = format!("{:X}\r\n", chunk.len());
-        self.res.writer().write_all(chunk_size_hex.as_bytes()).await?;
+        self.res
+            .writer()
+            .write_all(chunk_size_hex.as_bytes())
+            .await?;
         self.res.writer().write_all(chunk).await?;
         self.res.writer().write_all(b"\r\n").await
     }
@@ -195,7 +216,9 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
     }
 }
 
-impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connection<C, R, W, ResponseReadyToSend> {
+impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static>
+    Connection<C, R, W, ResponseReadyToSend>
+{
     pub(crate) async fn flush(mut self) -> ConnectionResult<Connection<C, R, W, NoneBody>> {
         if self.res.is_flushed() {
             return Ok(Connection {
