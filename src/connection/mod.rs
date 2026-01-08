@@ -147,7 +147,7 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static>
         mut reader: T,
     ) -> ConnectionResult<Connection<C, R, W, ResponseReadyToSend>>
     where
-        T: SizedAsyncRead + Send,
+        T: SizedAsyncRead,
     {
         let size = reader.size();
         self.res.header_add("Content-Length", size.to_string());
