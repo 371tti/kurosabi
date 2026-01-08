@@ -5,37 +5,23 @@ use async_std::net::TcpListener;
 use async_std::task;
 
 use futures_io::{AsyncRead, AsyncWrite};
-use kurosabi::{connection::{Connection, ConnectionState, ResponseReadyToSend}, http::method::HttpMethod, router::{KurosabiRouter, Router, RoutingResult}};
+use futures_util::AsyncReadExt;
+use kurosabi::{connection::{Connection, ConnectionState, ResponseReadyToSend}, http::method::HttpMethod, router::{KurosabiRouter, Router}};
 
 #[async_std::main]
 async fn main() -> Result<()> {
     let listener = TcpListener::bind(("0.0.0.0", 8080)).await?;
     println!("listening on :8080");
 
-    let router = MyRouter;
-
-    let router = KurosabiRouter::new(router);
+    let router: KurosabiRouter<MyRouter> = KurosabiRouter::new();
 
     loop {
-        let (stream, addr) = listener.accept().await?;
+        let (stream, _addr) = listener.accept().await?;
         let router_ref = router.clone();
 
         task::spawn(async move {
-            let (reader, writer) = (stream.clone(), stream.clone());
-            let mut conn = router_ref.new_connection(reader, writer);
-            loop {
-                conn = match router_ref.routing(conn, None, None).await {
-                    RoutingResult::Continue(c) => c,
-                    RoutingResult::Close(e) => {
-                        eprintln!("Connection with {} closed: {:?}", addr, e);
-                        break;
-                    }
-                    RoutingResult::CloseHaveConnection(e) => {
-                        eprintln!("Connection with {} closed: {:?}", addr, e.router_error);
-                        break;
-                    }
-                };
-            }
+            let (reader, writer) = stream.split();
+            router_ref.new_connection_loop(reader, writer).await;
         });
     }
 }
@@ -56,21 +42,22 @@ impl<
     ) -> Connection<C, R, W, ResponseReadyToSend> {
         // return conn.text_body("uee");
         let method = conn.req.method();
-        let path = conn.req.path_full();
-        let mut it = path.split('/').skip(1);
         match method {
             HttpMethod::GET => {
-                match it.next() {
-                    Some("hello") => {
-                        if let Some(name) = it.next() {
-                            let name = name.to_string();
-                            conn.text_body(format!("Hello, {}!", name))
-                        } else {
-                            conn.text_body("Hello, World!")
-                        }
+                match conn.path_segs().as_ref() {
+                    ["hello"] => {
+                        conn.text_body("Hello, World!")
                     }
-                    Some("") => {
-                        conn.text_body("Welcome to the root path!")
+                    ["hello", name] => {
+                        let body = format!("Hello, {}!", name);
+                        conn.text_body(body)
+                    }
+                    ["anything", others @ ..] => {
+                        let own: String = others.iter().map(|s| *s).collect::<Vec<&str>>().join("/");
+                        conn.text_body(format!("You requested /anything/{}!", own))
+                    }
+                    [] => {
+                        conn.text_body("Welcome to the Kurosabi HTTP Server!")
                     }
                     _ => {
                         conn.set_status_code(404u16).no_body()

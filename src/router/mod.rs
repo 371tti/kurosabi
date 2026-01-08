@@ -39,8 +39,17 @@ pub struct KurosabiRouter<D, C: Clone + Send = DefaultContext> {
     http_header_read_timeout: Duration,
 }
 
-impl<D> KurosabiRouter<D, DefaultContext> {
-    pub fn new(router: D) -> Self {
+impl<D: Default> KurosabiRouter<D, DefaultContext> {
+    pub fn new() -> Self {
+        Self {
+            context: DefaultContext::default(),
+            router: D::default(),
+            keep_alive_timeout: DEFAULT_KEEP_ALIVE_TIMEOUT,
+            http_header_read_timeout: DEFAULT_HTTP_HEADER_READ_TIMEOUT,
+        }
+    }
+
+    pub fn with_router(router: D) -> Self {
         Self {
             context: DefaultContext::default(),
             router,
@@ -51,7 +60,19 @@ impl<D> KurosabiRouter<D, DefaultContext> {
 }
 
 impl<D, C: Clone + Send> KurosabiRouter<D, C> {
-    pub fn with_context(router: D, context: C) -> Self {
+    pub fn with_context(context: C) -> Self
+    where
+        D: Default,
+    {
+        KurosabiRouter {
+            context,
+            router: D::default(),
+            keep_alive_timeout: DEFAULT_KEEP_ALIVE_TIMEOUT,
+            http_header_read_timeout: DEFAULT_HTTP_HEADER_READ_TIMEOUT,
+        }
+    }
+
+    pub fn with_context_and_router(router: D, context: C) -> Self {
         KurosabiRouter {
             context,
             router,
@@ -131,6 +152,29 @@ impl<D, C: Clone + Send> KurosabiRouter<D, C> {
         match self.router.router(conn).await.flush().await {
             Ok(conn) => RoutingResult::Continue(conn),
             Err(e) => RoutingResult::CloseHaveConnection(e),
+        }
+    }
+    pub async fn new_connection_loop<R, W>(
+        &self,
+        reader: R,
+        writer: W,
+    ) 
+    where
+        D: Router<C, R, W, ResponseReadyToSend>,
+        R: AsyncRead + Unpin + Send + 'static,
+        W: AsyncWrite + Unpin + Send + 'static,
+    {
+        let mut conn = self.new_connection(reader, writer);
+        loop {
+            conn = match self.routing(conn, None, None).await {
+                RoutingResult::Continue(c) => c,
+                RoutingResult::Close(_) => {
+                    break;
+                }
+                RoutingResult::CloseHaveConnection(_) => {
+                    break;
+                }
+            };
         }
     }
 }
