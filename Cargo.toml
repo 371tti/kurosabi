@@ -13,3 +13,6 @@ futures-core = { version = "0.3", default-features = false }
 futures-io   = { version = "0.3", default-features = false }
 futures-util = { version = "0.3", default-features = false, features = ["io"] }
 futures-timer = { version = "3.0.3", default-features = false }
+
+[dev-dependencies]
+async-std = { version = "1.13.2", features = ["attributes"] }

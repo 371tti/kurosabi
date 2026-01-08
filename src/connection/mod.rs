@@ -1,3 +1,5 @@
+use std::borrow::Borrow;
+
 use futures_io::{AsyncRead, AsyncWrite};
 use futures_util::{AsyncReadExt, AsyncWriteExt};
 
@@ -70,7 +72,10 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static>
         }
     }
 
-    pub fn text_body(self, body: &str) -> Connection<C, R, W, ResponseReadyToSend> {
+    pub fn text_body<T>(self, body: T) -> Connection<C, R, W, ResponseReadyToSend> 
+    where 
+        T: Borrow<str> + Sized,
+    {
         self.set_status_code(HttpStatusCode::OK).text_body(body)
     }
 
@@ -82,8 +87,19 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static>
 impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static>
     Connection<C, R, W, StatusSetNoneBody>
 {
-    pub fn text_body(mut self, body: &str) -> Connection<C, R, W, ResponseReadyToSend> {
-        self.res.text_body(body);
+    pub fn set_status_code<T>(mut self, status_code: T) -> Self
+    where
+        T: Into<u16>,
+    {
+        self.res.set_status_code(status_code);
+        self
+    }
+
+    pub fn text_body<T>(mut self, body: T) -> Connection<C, R, W, ResponseReadyToSend> 
+    where 
+        T: Borrow<str> + Sized,
+    {
+        self.res.text_body(body.borrow());
         Connection {
             c: self.c,
             req: self.req,
@@ -94,6 +110,18 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static>
 
     pub fn binary_body(mut self, body: &[u8]) -> Connection<C, R, W, ResponseReadyToSend> {
         self.res.binary_body(body);
+        Connection {
+            c: self.c,
+            req: self.req,
+            res: self.res,
+            phantom: std::marker::PhantomData,
+        }
+    }
+
+    pub fn no_body(mut self) -> Connection<C, R, W, ResponseReadyToSend> {
+        self.res.header_add("Content-Length", "0");
+        self.res.response_line_write();
+        self.res.start_content();
         Connection {
             c: self.c,
             req: self.req,
