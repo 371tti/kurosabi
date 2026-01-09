@@ -1,6 +1,6 @@
 [package]
 name = "kurosabi"
-version = "0.6.2"
+version = "0.6.3"
 edition = "2024"
 authors = ["371tti"]
 description = "A lightweight asynchronous HTTP server framework built on Tokio."
@@ -26,7 +26,7 @@ compio-io = { version = "0.8", features = ["compat"], optional = true }
 
 
 [features]
-default = ["compio-server"]
+default = ["tokio-server"]
 tokio-server = ["tokio", "tokio-util"]
 compio-server = ["compio", "compio-io"]
 json = ["serde", "serde_json"]

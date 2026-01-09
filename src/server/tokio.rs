@@ -1,29 +1,32 @@
-use std::{marker::PhantomData, time::Duration};
+use std::{marker::PhantomData, net::{Ipv4Addr, SocketAddr, SocketAddrV4}, sync::Arc, time::Duration};
 
-use tokio::net::{
-    TcpListener,
-    tcp::{OwnedReadHalf, OwnedWriteHalf},
-};
+use tokio::{net::{
+    TcpSocket, tcp::{OwnedReadHalf, OwnedWriteHalf}
+}, sync::Semaphore};
 use tokio_util::compat::{Compat, TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
 
 use crate::{
     connection::{Connection, ResponseReadyToSend},
-    router::{DEFAULT_KEEP_ALIVE_TIMEOUT, DefaultContext, KurosabiRouter, Router},
+    router::{DEFAULT_KEEP_ALIVE_TIMEOUT, DefaultContext, KurosabiRouter, Router}, server::{DEFAULT_LIMIT_HANDLE_NUM, DEFAULT_TCP_BACKLOG},
 };
 
 pub struct KurosabiServerBuilder {}
 pub struct KurosabiTokioServerBuilder<C: Clone = DefaultContext> {
     context: C,
-    bind: String,
+    bind: [u8; 4],
     port: u16,
     keep_alive_timeout: Duration,
     http_header_read_timeout: Duration,
+    limit_handle_num: usize,
+    tcp_backlog: u32,
 }
 
 pub struct KurosabiTokioServer<C: Clone + Sync + Send, H> {
     router: KurosabiRouter<MyRouter<C, H>, C>,
-    bind: String,
+    bind: [u8; 4],
     port: u16,
+    limit_handle_num: usize,
+    tcp_backlog: u32,
 }
 
 pub trait Handler<C>: Clone + Send + Sync + 'static {
@@ -53,10 +56,12 @@ impl<C: Clone + Sync + Send + Default> KurosabiTokioServerBuilder<C> {
     pub fn new() -> Self {
         KurosabiTokioServerBuilder {
             context: C::default(),
-            bind: "0.0.0.0".to_string(),
+            bind: [0, 0, 0, 0],
             port: 8080,
             keep_alive_timeout: DEFAULT_KEEP_ALIVE_TIMEOUT,
             http_header_read_timeout: DEFAULT_KEEP_ALIVE_TIMEOUT,
+            limit_handle_num: DEFAULT_LIMIT_HANDLE_NUM,
+            tcp_backlog: DEFAULT_TCP_BACKLOG,
         }
     }
 }
@@ -65,10 +70,12 @@ impl KurosabiTokioServerBuilder<DefaultContext> {
     pub fn default() -> Self {
         KurosabiTokioServerBuilder {
             context: DefaultContext::default(),
-            bind: "0.0.0.0".to_string(),
+            bind: [0, 0, 0, 0],
             port: 8080,
             keep_alive_timeout: DEFAULT_KEEP_ALIVE_TIMEOUT,
             http_header_read_timeout: DEFAULT_KEEP_ALIVE_TIMEOUT,
+            limit_handle_num: DEFAULT_LIMIT_HANDLE_NUM,
+            tcp_backlog: DEFAULT_TCP_BACKLOG,
         }
     }
 }
@@ -80,15 +87,17 @@ impl<C: Clone + Sync + Send> KurosabiTokioServerBuilder<C> {
     {
         KurosabiTokioServerBuilder {
             context,
-            bind: "0.0.0.0".to_string(),
+            bind: [0, 0, 0, 0],
             port: 8080,
             keep_alive_timeout: DEFAULT_KEEP_ALIVE_TIMEOUT,
             http_header_read_timeout: DEFAULT_KEEP_ALIVE_TIMEOUT,
+            limit_handle_num: DEFAULT_LIMIT_HANDLE_NUM,
+            tcp_backlog: DEFAULT_TCP_BACKLOG,
         }
     }
 
     pub fn bind(mut self, bind: [u8; 4]) -> Self {
-        self.bind = format!("{}.{}.{}.{}", bind[0], bind[1], bind[2], bind[3]);
+        self.bind = bind;
         self
     }
 
@@ -107,13 +116,23 @@ impl<C: Clone + Sync + Send> KurosabiTokioServerBuilder<C> {
         self
     }
 
+    pub fn limit_handle_num(mut self, num: usize) -> Self {
+        self.limit_handle_num = num;
+        self
+    }
+
+    pub fn tcp_backlog(mut self, backlog: u32) -> Self {
+        self.tcp_backlog = backlog;
+        self
+    }
+
     pub(crate) fn router_and_build_inner<H>(self, handler: H) -> KurosabiTokioServer<C, H>
     where
         H: Handler<C>,
     {
         let my_router = MyRouter { handler, _marker: PhantomData };
         let router = KurosabiRouter::with_context_and_router(my_router, self.context);
-        KurosabiTokioServer { router, bind: self.bind, port: self.port }
+        KurosabiTokioServer { router, bind: self.bind, port: self.port, limit_handle_num: self.limit_handle_num, tcp_backlog: self.tcp_backlog }
     }
 
     pub fn router_and_build<F, Fut>(self, handler: F) -> KurosabiTokioServer<C, F>
@@ -129,17 +148,25 @@ impl<C: Clone + Sync + Send> KurosabiTokioServerBuilder<C> {
 
 impl<C: Clone + Sync + Send + 'static, H: Handler<C>> KurosabiTokioServer<C, H> {
     pub async fn run(self) -> std::io::Result<()> {
-        let listener = TcpListener::bind((self.bind.as_str(), self.port)).await?;
-        println!("listening on {}:{}", self.bind, self.port);
+        let socket = TcpSocket::new_v4()?;
+        socket.bind(SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::from_octets(self.bind), self.port)))?;
+
+        let listener = socket.listen(self.tcp_backlog)?;
+
+        // 同時に処理する接続数を制限
+        let sem = Arc::new(Semaphore::new(self.limit_handle_num));
 
         loop {
             let (stream, _addr) = listener.accept().await?;
+            let permit = sem.clone().acquire_owned().await.unwrap();
+
             let router_ref = self.router.clone();
             tokio::spawn(async move {
+                let _permit = permit; // dropで返却される
                 let (reader, writer) = stream.into_split();
                 let reader = reader.compat();
                 let writer = writer.compat_write();
-                router_ref.new_connection_loop(reader, writer).await;
+                let _ = router_ref.new_connection_loop(reader, writer).await;
             });
         }
     }
