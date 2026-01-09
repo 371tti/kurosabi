@@ -8,18 +8,24 @@ license = "MIT"
 repository = "https://github.com/371tti/kurosabi"
 readme = "README.md"
 
+
 [dependencies]
 futures-core = { version = "0.3", default-features = false }
 futures-io   = { version = "0.3", default-features = false }
 futures-util = { version = "0.3", default-features = false, features = ["io"] }
 futures-timer = { version = "3", default-features = false }
 
-
 tokio = { version = "1", features = ["full"], optional = true }
 tokio-util = { version = "0.7", features = ["compat"], optional = true }
 
+serde = { version = "1", optional = true }
+serde_json = { version = "1", optional = true }
+
+
 [features]
 tokio-server = ["tokio", "tokio-util"]
+json = ["serde", "serde_json"]
+
 
 [[example]]
 name = "hello"

@@ -157,162 +157,54 @@ impl HttpStatusCode {
 
     pub fn info(&self) -> HttpStatusInfo {
         match self {
-            HttpStatusCode::Continue => HttpStatusInfo {
-                code: 100,
-                message: "Continue",
-            },
+            HttpStatusCode::Continue => HttpStatusInfo { code: 100, message: "Continue" },
             HttpStatusCode::SwitchingProtocols => HttpStatusInfo {
                 code: 101,
                 message: "Switching Protocols",
             },
-            HttpStatusCode::Processing => HttpStatusInfo {
-                code: 102,
-                message: "Processing",
-            },
-            HttpStatusCode::EarlyHints => HttpStatusInfo {
-                code: 103,
-                message: "Early Hints",
-            },
-            HttpStatusCode::OK => HttpStatusInfo {
-                code: 200,
-                message: "OK",
-            },
-            HttpStatusCode::Created => HttpStatusInfo {
-                code: 201,
-                message: "Created",
-            },
-            HttpStatusCode::Accepted => HttpStatusInfo {
-                code: 202,
-                message: "Accepted",
-            },
+            HttpStatusCode::Processing => HttpStatusInfo { code: 102, message: "Processing" },
+            HttpStatusCode::EarlyHints => HttpStatusInfo { code: 103, message: "Early Hints" },
+            HttpStatusCode::OK => HttpStatusInfo { code: 200, message: "OK" },
+            HttpStatusCode::Created => HttpStatusInfo { code: 201, message: "Created" },
+            HttpStatusCode::Accepted => HttpStatusInfo { code: 202, message: "Accepted" },
             HttpStatusCode::NonAuthoritativeInformation => HttpStatusInfo {
                 code: 203,
                 message: "Non-Authoritative Information",
             },
-            HttpStatusCode::NoContent => HttpStatusInfo {
-                code: 204,
-                message: "No Content",
-            },
-            HttpStatusCode::ResetContent => HttpStatusInfo {
-                code: 205,
-                message: "Reset Content",
-            },
-            HttpStatusCode::PartialContent => HttpStatusInfo {
-                code: 206,
-                message: "Partial Content",
-            },
-            HttpStatusCode::MultiStatus => HttpStatusInfo {
-                code: 207,
-                message: "Multi-Status",
-            },
-            HttpStatusCode::AlreadyReported => HttpStatusInfo {
-                code: 208,
-                message: "Already Reported",
-            },
-            HttpStatusCode::ThisIsFine => HttpStatusInfo {
-                code: 218,
-                message: "This is fine",
-            },
-            HttpStatusCode::IMUsed => HttpStatusInfo {
-                code: 226,
-                message: "IM Used",
-            },
-            HttpStatusCode::MultipleChoices => HttpStatusInfo {
-                code: 300,
-                message: "Multiple Choices",
-            },
-            HttpStatusCode::MovedPermanently => HttpStatusInfo {
-                code: 301,
-                message: "Moved Permanently",
-            },
-            HttpStatusCode::Found => HttpStatusInfo {
-                code: 302,
-                message: "Found",
-            },
-            HttpStatusCode::SeeOther => HttpStatusInfo {
-                code: 303,
-                message: "See Other",
-            },
-            HttpStatusCode::NotModified => HttpStatusInfo {
-                code: 304,
-                message: "Not Modified",
-            },
-            HttpStatusCode::UseProxy => HttpStatusInfo {
-                code: 305,
-                message: "Use Proxy",
-            },
-            HttpStatusCode::Unused => HttpStatusInfo {
-                code: 306,
-                message: "(Unused)",
-            },
-            HttpStatusCode::TemporaryRedirect => HttpStatusInfo {
-                code: 307,
-                message: "Temporary Redirect",
-            },
-            HttpStatusCode::PermanentRedirect => HttpStatusInfo {
-                code: 308,
-                message: "Permanent Redirect",
-            },
-            HttpStatusCode::BadRequest => HttpStatusInfo {
-                code: 400,
-                message: "BadRequest",
-            },
-            HttpStatusCode::Unauthorized => HttpStatusInfo {
-                code: 401,
-                message: "Unauthorized",
-            },
-            HttpStatusCode::PaymentRequired => HttpStatusInfo {
-                code: 402,
-                message: "Payment Required",
-            },
-            HttpStatusCode::Forbidden => HttpStatusInfo {
-                code: 403,
-                message: "Forbidden",
-            },
-            HttpStatusCode::NotFound => HttpStatusInfo {
-                code: 404,
-                message: "NotFound",
-            },
-            HttpStatusCode::MethodNotAllowed => HttpStatusInfo {
-                code: 405,
-                message: "MethodNotAllowed",
-            },
-            HttpStatusCode::NotAcceptable => HttpStatusInfo {
-                code: 406,
-                message: "NotAcceptable",
-            },
+            HttpStatusCode::NoContent => HttpStatusInfo { code: 204, message: "No Content" },
+            HttpStatusCode::ResetContent => HttpStatusInfo { code: 205, message: "Reset Content" },
+            HttpStatusCode::PartialContent => HttpStatusInfo { code: 206, message: "Partial Content" },
+            HttpStatusCode::MultiStatus => HttpStatusInfo { code: 207, message: "Multi-Status" },
+            HttpStatusCode::AlreadyReported => HttpStatusInfo { code: 208, message: "Already Reported" },
+            HttpStatusCode::ThisIsFine => HttpStatusInfo { code: 218, message: "This is fine" },
+            HttpStatusCode::IMUsed => HttpStatusInfo { code: 226, message: "IM Used" },
+            HttpStatusCode::MultipleChoices => HttpStatusInfo { code: 300, message: "Multiple Choices" },
+            HttpStatusCode::MovedPermanently => HttpStatusInfo { code: 301, message: "Moved Permanently" },
+            HttpStatusCode::Found => HttpStatusInfo { code: 302, message: "Found" },
+            HttpStatusCode::SeeOther => HttpStatusInfo { code: 303, message: "See Other" },
+            HttpStatusCode::NotModified => HttpStatusInfo { code: 304, message: "Not Modified" },
+            HttpStatusCode::UseProxy => HttpStatusInfo { code: 305, message: "Use Proxy" },
+            HttpStatusCode::Unused => HttpStatusInfo { code: 306, message: "(Unused)" },
+            HttpStatusCode::TemporaryRedirect => HttpStatusInfo { code: 307, message: "Temporary Redirect" },
+            HttpStatusCode::PermanentRedirect => HttpStatusInfo { code: 308, message: "Permanent Redirect" },
+            HttpStatusCode::BadRequest => HttpStatusInfo { code: 400, message: "BadRequest" },
+            HttpStatusCode::Unauthorized => HttpStatusInfo { code: 401, message: "Unauthorized" },
+            HttpStatusCode::PaymentRequired => HttpStatusInfo { code: 402, message: "Payment Required" },
+            HttpStatusCode::Forbidden => HttpStatusInfo { code: 403, message: "Forbidden" },
+            HttpStatusCode::NotFound => HttpStatusInfo { code: 404, message: "NotFound" },
+            HttpStatusCode::MethodNotAllowed => HttpStatusInfo { code: 405, message: "MethodNotAllowed" },
+            HttpStatusCode::NotAcceptable => HttpStatusInfo { code: 406, message: "NotAcceptable" },
             HttpStatusCode::ProxyAuthenticationRequired => HttpStatusInfo {
                 code: 407,
                 message: "ProxyAuthenticationRequired",
             },
-            HttpStatusCode::RequestTimeout => HttpStatusInfo {
-                code: 408,
-                message: "RequestTimeout",
-            },
-            HttpStatusCode::Conflict => HttpStatusInfo {
-                code: 409,
-                message: "Conflict",
-            },
-            HttpStatusCode::Gone => HttpStatusInfo {
-                code: 410,
-                message: "Gone",
-            },
-            HttpStatusCode::LengthRequired => HttpStatusInfo {
-                code: 411,
-                message: "LengthRequired",
-            },
-            HttpStatusCode::PreconditionFailed => HttpStatusInfo {
-                code: 412,
-                message: "PreconditionFailed",
-            },
-            HttpStatusCode::PayloadTooLarge => HttpStatusInfo {
-                code: 413,
-                message: "PayloadTooLarge",
-            },
-            HttpStatusCode::URITooLong => HttpStatusInfo {
-                code: 414,
-                message: "URITooLong",
-            },
+            HttpStatusCode::RequestTimeout => HttpStatusInfo { code: 408, message: "RequestTimeout" },
+            HttpStatusCode::Conflict => HttpStatusInfo { code: 409, message: "Conflict" },
+            HttpStatusCode::Gone => HttpStatusInfo { code: 410, message: "Gone" },
+            HttpStatusCode::LengthRequired => HttpStatusInfo { code: 411, message: "LengthRequired" },
+            HttpStatusCode::PreconditionFailed => HttpStatusInfo { code: 412, message: "PreconditionFailed" },
+            HttpStatusCode::PayloadTooLarge => HttpStatusInfo { code: 413, message: "PayloadTooLarge" },
+            HttpStatusCode::URITooLong => HttpStatusInfo { code: 414, message: "URITooLong" },
             HttpStatusCode::UnsupportedMediaType => HttpStatusInfo {
                 code: 415,
                 message: "UnsupportedMediaType",
@@ -321,14 +213,8 @@ impl HttpStatusCode {
                 code: 416,
                 message: "RangeNotSatisfiable",
             },
-            HttpStatusCode::ExpectationFailed => HttpStatusInfo {
-                code: 417,
-                message: "ExpectationFailed",
-            },
-            HttpStatusCode::ImATeapot => HttpStatusInfo {
-                code: 418,
-                message: "I'm a Teapot",
-            },
+            HttpStatusCode::ExpectationFailed => HttpStatusInfo { code: 417, message: "ExpectationFailed" },
+            HttpStatusCode::ImATeapot => HttpStatusInfo { code: 418, message: "I'm a Teapot" },
             HttpStatusCode::MisdirectedRequest => HttpStatusInfo {
                 code: 421,
                 message: "Misdirected Request",
@@ -337,30 +223,15 @@ impl HttpStatusCode {
                 code: 422,
                 message: "UnprocessableEntity",
             },
-            HttpStatusCode::Locked => HttpStatusInfo {
-                code: 423,
-                message: "Locked",
-            },
-            HttpStatusCode::FailedDependency => HttpStatusInfo {
-                code: 424,
-                message: "FailedDependency",
-            },
-            HttpStatusCode::TooEarly => HttpStatusInfo {
-                code: 425,
-                message: "TooEarly",
-            },
-            HttpStatusCode::UpgradeRequired => HttpStatusInfo {
-                code: 426,
-                message: "UpgradeRequired",
-            },
+            HttpStatusCode::Locked => HttpStatusInfo { code: 423, message: "Locked" },
+            HttpStatusCode::FailedDependency => HttpStatusInfo { code: 424, message: "FailedDependency" },
+            HttpStatusCode::TooEarly => HttpStatusInfo { code: 425, message: "TooEarly" },
+            HttpStatusCode::UpgradeRequired => HttpStatusInfo { code: 426, message: "UpgradeRequired" },
             HttpStatusCode::PreconditionRequired => HttpStatusInfo {
                 code: 428,
                 message: "PreconditionRequired",
             },
-            HttpStatusCode::TooManyRequests => HttpStatusInfo {
-                code: 429,
-                message: "TooManyRequests",
-            },
+            HttpStatusCode::TooManyRequests => HttpStatusInfo { code: 429, message: "TooManyRequests" },
             HttpStatusCode::RequestHeaderFieldsTooLarge => HttpStatusInfo {
                 code: 431,
                 message: "RequestHeaderFieldsTooLarge",
@@ -373,22 +244,10 @@ impl HttpStatusCode {
                 code: 500,
                 message: "InternalServerError",
             },
-            HttpStatusCode::NotImplemented => HttpStatusInfo {
-                code: 501,
-                message: "NotImplemented",
-            },
-            HttpStatusCode::BadGateway => HttpStatusInfo {
-                code: 502,
-                message: "BadGateway",
-            },
-            HttpStatusCode::ServiceUnavailable => HttpStatusInfo {
-                code: 503,
-                message: "ServiceUnavailable",
-            },
-            HttpStatusCode::GatewayTimeout => HttpStatusInfo {
-                code: 504,
-                message: "GatewayTimeout",
-            },
+            HttpStatusCode::NotImplemented => HttpStatusInfo { code: 501, message: "NotImplemented" },
+            HttpStatusCode::BadGateway => HttpStatusInfo { code: 502, message: "BadGateway" },
+            HttpStatusCode::ServiceUnavailable => HttpStatusInfo { code: 503, message: "ServiceUnavailable" },
+            HttpStatusCode::GatewayTimeout => HttpStatusInfo { code: 504, message: "GatewayTimeout" },
             HttpStatusCode::HTTPVersionNotSupported => HttpStatusInfo {
                 code: 505,
                 message: "HTTPVersionNotSupported",
@@ -401,22 +260,13 @@ impl HttpStatusCode {
                 code: 507,
                 message: "InsufficientStorage",
             },
-            HttpStatusCode::LoopDetected => HttpStatusInfo {
-                code: 508,
-                message: "LoopDetected",
-            },
-            HttpStatusCode::NotExtended => HttpStatusInfo {
-                code: 510,
-                message: "NotExtended",
-            },
+            HttpStatusCode::LoopDetected => HttpStatusInfo { code: 508, message: "LoopDetected" },
+            HttpStatusCode::NotExtended => HttpStatusInfo { code: 510, message: "NotExtended" },
             HttpStatusCode::NetworkAuthenticationRequired => HttpStatusInfo {
                 code: 511,
                 message: "NetworkAuthenticationRequired",
             },
-            HttpStatusCode::GoodLuck => HttpStatusInfo {
-                code: 777,
-                message: "Good Luck",
-            },
+            HttpStatusCode::GoodLuck => HttpStatusInfo { code: 777, message: "Good Luck" },
         }
     }
 }

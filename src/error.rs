@@ -19,26 +19,26 @@ impl fmt::Display for RouterError {
         match self {
             RouterError::HttpErrorCode(code) => {
                 write!(f, "RouterError: HTTP Error Code {}", *code as u16)
-            }
+            },
             RouterError::HttpErrorCodeWithMessage(code, msg) => {
                 write!(f, "RouterError: HTTP Error Code {} - {}", *code as u16, msg)
-            }
+            },
             RouterError::InvalidHttpRequest(range, msg) => {
                 write!(
                     f,
                     "RouterError: Invalid HTTP Request at {:?} - {}",
                     range, msg
                 )
-            }
+            },
             RouterError::IoError(e) => {
                 write!(f, "RouterError: IO Error - {}", e)
-            }
+            },
             RouterError::Timeout => {
                 write!(f, "RouterError: Timeout Error")
-            }
+            },
             RouterError::KeepAliveTimeout => {
                 write!(f, "RouterError: Keep-Alive Timeout Error")
-            }
+            },
         }
     }
 }

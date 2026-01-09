@@ -10,12 +10,8 @@ use crate::{
 
 /// Connection struct
 /// one http connection per one instance
-pub struct Connection<
-    C,
-    R: AsyncRead + Unpin + 'static,
-    W: AsyncWrite + Unpin + 'static,
-    S: ConnectionState = NoneBody,
-> {
+pub struct Connection<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static, S: ConnectionState = NoneBody>
+{
     pub c: C,
     pub req: HttpRequest<R>,
     pub res: HttpResponse<W>,
@@ -43,9 +39,7 @@ pub trait SizedAsyncRead: AsyncRead + Unpin + 'static {
     fn size(&self) -> usize;
 }
 
-impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static, S: ConnectionState>
-    Connection<C, R, W, S>
-{
+impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static, S: ConnectionState> Connection<C, R, W, S> {
     pub fn path_seg_iter<'a>(&'a self) -> PathSegmentIterator<'a> {
         PathSegmentIterator::new(self.req.path_full())
     }
@@ -55,9 +49,7 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static, S: Conn
     }
 }
 
-impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static>
-    Connection<C, R, W, NoneBody>
-{
+impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connection<C, R, W, NoneBody> {
     pub fn new(c: C, req: HttpRequest<R>, res: HttpResponse<W>) -> Self {
         Connection {
             c,
@@ -68,9 +60,7 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static>
     }
 }
 
-impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static>
-    Connection<C, R, W, NoneBody>
-{
+impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connection<C, R, W, NoneBody> {
     pub fn set_status_code<T>(mut self, status_code: T) -> Connection<C, R, W, StatusSetNoneBody>
     where
         T: Into<u16>,
@@ -84,8 +74,25 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static>
         }
     }
 
-    pub fn text_body<T>(self, body: T) -> Connection<C, R, W, ResponseReadyToSend> 
-    where 
+    pub fn add_header<K, V>(mut self, key: K, value: V) -> Self
+    where
+        K: Into<String>,
+        V: Into<String>,
+    {
+        self.res.header_add(key, value);
+        self
+    }
+
+    pub fn remove_header<S>(mut self, key: S) -> Self
+    where
+        S: std::borrow::Borrow<str>,
+    {
+        self.res.header_remove(key);
+        self
+    }
+
+    pub fn text_body<T>(self, body: T) -> Connection<C, R, W, ResponseReadyToSend>
+    where
         T: Borrow<str> + Sized,
     {
         self.set_status_code(HttpStatusCode::OK).text_body(body)
@@ -94,11 +101,105 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static>
     pub fn binary_body(self, body: &[u8]) -> Connection<C, R, W, ResponseReadyToSend> {
         self.set_status_code(HttpStatusCode::OK).binary_body(body)
     }
+
+    pub fn html_body<T>(self, body: T) -> Connection<C, R, W, ResponseReadyToSend>
+    where
+        T: Borrow<str> + Sized,
+    {
+        self.set_status_code(HttpStatusCode::OK).html_body(body)
+    }
+
+    pub fn json_body<T>(self, body: T) -> Connection<C, R, W, ResponseReadyToSend>
+    where
+        T: Borrow<str> + Sized,
+    {
+        self.set_status_code(HttpStatusCode::OK).json_body(body)
+    }
+
+    pub fn xml_body<T>(self, body: T) -> Connection<C, R, W, ResponseReadyToSend>
+    where
+        T: Borrow<str> + Sized,
+    {
+        self.set_status_code(HttpStatusCode::OK).xml_body(body)
+    }
+
+    pub fn csv_body<T>(self, body: T) -> Connection<C, R, W, ResponseReadyToSend>
+    where
+        T: Borrow<str> + Sized,
+    {
+        self.set_status_code(HttpStatusCode::OK).csv_body(body)
+    }
+
+    pub fn css_body<T>(self, body: T) -> Connection<C, R, W, ResponseReadyToSend>
+    where
+        T: Borrow<str> + Sized,
+    {
+        self.set_status_code(HttpStatusCode::OK).css_body(body)
+    }
+
+    pub fn js_body<T>(self, body: T) -> Connection<C, R, W, ResponseReadyToSend>
+    where
+        T: Borrow<str> + Sized,
+    {
+        self.set_status_code(HttpStatusCode::OK).js_body(body)
+    }
+
+    pub fn png_body(self, body: &[u8]) -> Connection<C, R, W, ResponseReadyToSend> {
+        self.set_status_code(HttpStatusCode::OK).png_body(body)
+    }
+
+    pub fn jpg_body(self, body: &[u8]) -> Connection<C, R, W, ResponseReadyToSend> {
+        self.set_status_code(HttpStatusCode::OK).jpg_body(body)
+    }
+
+    pub fn gif_body(self, body: &[u8]) -> Connection<C, R, W, ResponseReadyToSend> {
+        self.set_status_code(HttpStatusCode::OK).gif_body(body)
+    }
+
+    pub fn svg_body<T>(self, body: T) -> Connection<C, R, W, ResponseReadyToSend>
+    where
+        T: Borrow<str> + Sized,
+    {
+        self.set_status_code(HttpStatusCode::OK).svg_body(body)
+    }
+
+    pub fn pdf_body(self, body: &[u8]) -> Connection<C, R, W, ResponseReadyToSend> {
+        self.set_status_code(HttpStatusCode::OK).pdf_body(body)
+    }
+
+    pub fn xml_body_bytes(self, body: &[u8]) -> Connection<C, R, W, ResponseReadyToSend> {
+        self.set_status_code(HttpStatusCode::OK).xml_body_bytes(body)
+    }
+
+    pub fn json_body_bytes(self, body: &[u8]) -> Connection<C, R, W, ResponseReadyToSend> {
+        self.set_status_code(HttpStatusCode::OK).json_body_bytes(body)
+    }
+
+    #[cfg(feature = "json")]
+    pub fn json_body_serialized<T>(self, body: &T) -> Result<Connection<C, R, W, ResponseReadyToSend>, JsonSerErrorPare<Connection<C, R, W, NoneBody>>>
+    where
+        T: serde::Serialize,
+    {
+        match self.set_status_code(HttpStatusCode::OK).json_body_serialized(body) {
+            Ok(conn) => Ok(conn),
+            Err(e) => Err(JsonSerErrorPare {
+                serde_error: e.serde_error,
+                connection: Connection {
+                    c: e.connection.c,
+                    req: e.connection.req,
+                    res: e.connection.res,
+                    phantom: std::marker::PhantomData,
+                },
+            }),
+        }
+    }
+
+    pub fn no_body(self) -> Connection<C, R, W, ResponseReadyToSend> {
+        self.set_status_code(HttpStatusCode::OK).no_body()
+    }
 }
 
-impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static>
-    Connection<C, R, W, StatusSetNoneBody>
-{
+impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connection<C, R, W, StatusSetNoneBody> {
     pub fn set_status_code<T>(mut self, status_code: T) -> Self
     where
         T: Into<u16>,
@@ -107,8 +208,25 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static>
         self
     }
 
-    pub fn text_body<T>(mut self, body: T) -> Connection<C, R, W, ResponseReadyToSend> 
-    where 
+    pub fn add_header<K, V>(mut self, key: K, value: V) -> Self
+    where
+        K: Into<String>,
+        V: Into<String>,
+    {
+        self.res.header_add(key, value);
+        self
+    }
+
+    pub fn remove_header<S>(mut self, key: S) -> Self
+    where
+        S: std::borrow::Borrow<str>,
+    {
+        self.res.header_remove(key);
+        self
+    }
+
+    pub fn text_body<T>(mut self, body: T) -> Connection<C, R, W, ResponseReadyToSend>
+    where
         T: Borrow<str> + Sized,
     {
         self.res.text_body(body.borrow());
@@ -130,6 +248,196 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static>
         }
     }
 
+    pub fn html_body<T>(mut self, body: T) -> Connection<C, R, W, ResponseReadyToSend>
+    where
+        T: Borrow<str> + Sized,
+    {
+        self.res.html_body(body.borrow());
+        Connection {
+            c: self.c,
+            req: self.req,
+            res: self.res,
+            phantom: std::marker::PhantomData,
+        }
+    }
+
+    pub fn json_body<T>(mut self, body: T) -> Connection<C, R, W, ResponseReadyToSend>
+    where
+        T: Borrow<str> + Sized,
+    {
+        self.res.json_body(body.borrow());
+        Connection {
+            c: self.c,
+            req: self.req,
+            res: self.res,
+            phantom: std::marker::PhantomData,
+        }
+    }
+
+    pub fn xml_body<T>(mut self, body: T) -> Connection<C, R, W, ResponseReadyToSend>
+    where
+        T: Borrow<str> + Sized,
+    {
+        self.res.xml_body(body.borrow());
+        Connection {
+            c: self.c,
+            req: self.req,
+            res: self.res,
+            phantom: std::marker::PhantomData,
+        }
+    }
+
+    pub fn csv_body<T>(mut self, body: T) -> Connection<C, R, W, ResponseReadyToSend>
+    where
+        T: Borrow<str> + Sized,
+    {
+        self.res.csv_body(body.borrow());
+        Connection {
+            c: self.c,
+            req: self.req,
+            res: self.res,
+            phantom: std::marker::PhantomData,
+        }
+    }
+
+    pub fn css_body<T>(mut self, body: T) -> Connection<C, R, W, ResponseReadyToSend>
+    where
+        T: Borrow<str> + Sized,
+    {
+        self.res.css_body(body.borrow());
+        Connection {
+            c: self.c,
+            req: self.req,
+            res: self.res,
+            phantom: std::marker::PhantomData,
+        }
+    }
+
+    pub fn js_body<T>(mut self, body: T) -> Connection<C, R, W, ResponseReadyToSend>
+    where
+        T: Borrow<str> + Sized,
+    {
+        self.res.js_body(body.borrow());
+        Connection {
+            c: self.c,
+            req: self.req,
+            res: self.res,
+            phantom: std::marker::PhantomData,
+        }
+    }
+
+    pub fn png_body(mut self, body: &[u8]) -> Connection<C, R, W, ResponseReadyToSend> {
+        self.res.png_body(body);
+        Connection {
+            c: self.c,
+            req: self.req,
+            res: self.res,
+            phantom: std::marker::PhantomData,
+        }
+    }
+
+    pub fn jpg_body(mut self, body: &[u8]) -> Connection<C, R, W, ResponseReadyToSend> {
+        self.res.jpg_body(body);
+        Connection {
+            c: self.c,
+            req: self.req,
+            res: self.res,
+            phantom: std::marker::PhantomData,
+        }
+    }
+
+    pub fn gif_body(mut self, body: &[u8]) -> Connection<C, R, W, ResponseReadyToSend> {
+        self.res.gif_body(body);
+        Connection {
+            c: self.c,
+            req: self.req,
+            res: self.res,
+            phantom: std::marker::PhantomData,
+        }
+    }
+
+    pub fn svg_body<T>(mut self, body: T) -> Connection<C, R, W, ResponseReadyToSend>
+    where
+        T: Borrow<str> + Sized,
+    {
+        self.res.svg_body(body.borrow());
+        Connection {
+            c: self.c,
+            req: self.req,
+            res: self.res,
+            phantom: std::marker::PhantomData,
+        }
+    }
+
+    pub fn pdf_body(mut self, body: &[u8]) -> Connection<C, R, W, ResponseReadyToSend> {
+        self.res.pdf_body(body);
+        Connection {
+            c: self.c,
+            req: self.req,
+            res: self.res,
+            phantom: std::marker::PhantomData,
+        }
+    }
+
+    pub fn xml_body_bytes(mut self, body: &[u8]) -> Connection<C, R, W, ResponseReadyToSend> {
+        self.res.xml_body_bytes(body);
+        Connection {
+            c: self.c,
+            req: self.req,
+            res: self.res,
+            phantom: std::marker::PhantomData,
+        }
+    }
+
+    pub fn json_body_bytes(mut self, body: &[u8]) -> Connection<C, R, W, ResponseReadyToSend> {
+        self.res.json_body_bytes(body);
+        Connection {
+            c: self.c,
+            req: self.req,
+            res: self.res,
+            phantom: std::marker::PhantomData,
+        }
+    }
+
+    pub fn csv_body_bytes(mut self, body: &[u8]) -> Connection<C, R, W, ResponseReadyToSend> {
+        self.res.csv_body_bytes(body);
+        Connection {
+            c: self.c,
+            req: self.req,
+            res: self.res,
+            phantom: std::marker::PhantomData,
+        }
+    }
+
+    #[cfg(feature = "json")]
+    pub fn json_body_serialized<T>(mut self, body: &T) -> Result<Connection<C, R, W, ResponseReadyToSend>, JsonSerErrorPare<Connection<C, R, W, StatusSetNoneBody>>>
+    where
+        T: serde::Serialize,
+    {
+        let serialized = match serde_json::to_string(body) {
+            Ok(s) => s,
+            Err(e) => {
+                let conn = Connection {
+                    c: self.c,
+                    req: self.req,
+                    res: self.res,
+                    phantom: std::marker::PhantomData,
+                };
+                return Err(JsonSerErrorPare {
+                    serde_error: e,
+                    connection: conn,
+                });
+            },
+        };
+        self.res.json_body(&serialized);
+        Ok(Connection {
+            c: self.c,
+            req: self.req,
+            res: self.res,
+            phantom: std::marker::PhantomData,
+        })
+    }
+
     pub fn no_body(mut self) -> Connection<C, R, W, ResponseReadyToSend> {
         self.res.header_add("Content-Length", "0");
         self.res.response_line_write();
@@ -142,10 +450,7 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static>
         }
     }
 
-    pub async fn streaming<T>(
-        mut self,
-        mut reader: T,
-    ) -> ConnectionResult<Connection<C, R, W, ResponseReadyToSend>>
+    pub async fn streaming<T>(mut self, mut reader: T) -> ConnectionResult<Connection<C, R, W, ResponseReadyToSend>>
     where
         T: SizedAsyncRead,
     {
@@ -188,7 +493,7 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static>
                     router_error: RouterError::IoError(e),
                     connection: response_ready_conn,
                 });
-            }
+            },
         };
 
         Ok(Connection {
@@ -217,7 +522,7 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static>
                     router_error: RouterError::IoError(e),
                     connection: chunked_conn,
                 });
-            }
+            },
         }
         Ok(Connection {
             c: self.c,
@@ -228,9 +533,7 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static>
     }
 }
 
-impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static>
-    Connection<C, R, W, ChunkedResponse>
-{
+impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connection<C, R, W, ChunkedResponse> {
     pub async fn send_chunk(&mut self, chunk: &[u8]) -> std::io::Result<()> {
         let chunk_size_hex = format!("{:X}\r\n", chunk.len());
         self.res
@@ -256,9 +559,7 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static>
     }
 }
 
-impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static>
-    Connection<C, R, W, ResponseReadyToSend>
-{
+impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connection<C, R, W, ResponseReadyToSend> {
     pub(crate) async fn flush(mut self) -> ConnectionResult<Connection<C, R, W, NoneBody>> {
         if self.res.is_flushed() {
             return Ok(Connection {
@@ -283,7 +584,7 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static>
                     router_error: RouterError::IoError(e),
                     connection: completed_conn,
                 });
-            }
+            },
         }
         Ok(Connection {
             c: self.c,
@@ -314,10 +615,7 @@ impl PathSegmentIterator<'_> {
     pub fn new<'a>(path: &'a str) -> PathSegmentIterator<'a> {
         let mut split = path[1..].split('/');
         let next = split.next();
-        PathSegmentIterator {
-            segs: split,
-            next,
-        }
+        PathSegmentIterator { segs: split, next }
     }
 }
 
@@ -328,13 +626,15 @@ impl<'a> Iterator for PathSegmentIterator<'a> {
         match self.next {
             Some(seg) => {
                 self.next = self.segs.next();
-                if self.next.is_none() {
-                    Some(seg)
-                } else {
-                    Some(seg)
-                }
-            }
+                if self.next.is_none() { Some(seg) } else { Some(seg) }
+            },
             None => None,
         }
     }
+}
+
+#[cfg(feature = "json")]
+pub struct JsonSerErrorPare<T> {
+    pub serde_error: serde_json::Error,
+    pub connection: T,
 }

@@ -34,9 +34,7 @@ struct HeaderEntry {
 
 impl HttpHeader {
     pub fn new() -> Self {
-        HttpHeader {
-            headers: Vec::new(),
-        }
+        HttpHeader { headers: Vec::new() }
     }
 
     pub fn insert<K>(&mut self, key: K, value: String, buf: &mut Vec<u8>)

@@ -1,9 +1,15 @@
 use std::marker::PhantomData;
 
-use tokio::net::{TcpListener, tcp::{OwnedReadHalf, OwnedWriteHalf}};
+use tokio::net::{
+    TcpListener,
+    tcp::{OwnedReadHalf, OwnedWriteHalf},
+};
 use tokio_util::compat::{Compat, TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
 
-use crate::{connection::{Connection, ResponseReadyToSend}, router::{DefaultContext, KurosabiRouter, Router}};
+use crate::{
+    connection::{Connection, ResponseReadyToSend},
+    router::{DefaultContext, KurosabiRouter, Router},
+};
 
 pub struct KurosabiServerBuilder {}
 pub struct KurosabiTokioServerBuilder<C: Clone = DefaultContext> {
@@ -19,45 +25,23 @@ pub struct KurosabiTokioServer<C: Clone + Sync + Send, H> {
 }
 
 pub trait Handler<C>: Clone + Send + Sync + 'static {
-    type Fut: Future<
-            Output = Connection<
-                C,
-                Compat<OwnedReadHalf>,
-                Compat<OwnedWriteHalf>,
-                ResponseReadyToSend,
-            >,
-        > + Send
+    type Fut: Future<Output = Connection<C, Compat<OwnedReadHalf>, Compat<OwnedWriteHalf>, ResponseReadyToSend>>
+        + Send
         + 'static;
 
-    fn call(
-        &self,
-        conn: Connection<C, Compat<OwnedReadHalf>, Compat<OwnedWriteHalf>>,
-    ) -> Self::Fut;
+    fn call(&self, conn: Connection<C, Compat<OwnedReadHalf>, Compat<OwnedWriteHalf>>) -> Self::Fut;
 }
 
 impl<C, F, Fut> Handler<C> for F
 where
-    F: Fn(Connection<C, Compat<OwnedReadHalf>, Compat<OwnedWriteHalf>>) -> Fut
-        + Clone
+    F: Fn(Connection<C, Compat<OwnedReadHalf>, Compat<OwnedWriteHalf>>) -> Fut + Clone + Send + Sync + 'static,
+    Fut: Future<Output = Connection<C, Compat<OwnedReadHalf>, Compat<OwnedWriteHalf>, ResponseReadyToSend>>
         + Send
-        + Sync
-        + 'static,
-    Fut: Future<
-            Output = Connection<
-                C,
-                Compat<OwnedReadHalf>,
-                Compat<OwnedWriteHalf>,
-                ResponseReadyToSend,
-            >,
-        > + Send
         + 'static,
 {
     type Fut = Fut;
 
-    fn call(
-        &self,
-        conn: Connection<C, Compat<OwnedReadHalf>, Compat<OwnedWriteHalf>>,
-    ) -> Self::Fut {
+    fn call(&self, conn: Connection<C, Compat<OwnedReadHalf>, Compat<OwnedWriteHalf>>) -> Self::Fut {
         (self)(conn)
     }
 }
@@ -108,16 +92,9 @@ impl<C: Clone + Sync + Send> KurosabiTokioServerBuilder<C> {
     where
         H: Handler<C>,
     {
-        let my_router = MyRouter {
-            handler,
-            _marker: PhantomData,
-        };
+        let my_router = MyRouter { handler, _marker: PhantomData };
         let router = KurosabiRouter::with_context_and_router(my_router, self.context);
-        KurosabiTokioServer {
-            router,
-            bind: self.bind,
-            port: self.port,
-        }
+        KurosabiTokioServer { router, bind: self.bind, port: self.port }
     }
 }
 
@@ -145,8 +122,7 @@ struct MyRouter<C: Clone + Sync + Send, H> {
     _marker: PhantomData<fn() -> C>,
 }
 
-impl<C, H> Router<C, Compat<OwnedReadHalf>, Compat<OwnedWriteHalf>, ResponseReadyToSend>
-    for MyRouter<C, H>
+impl<C, H> Router<C, Compat<OwnedReadHalf>, Compat<OwnedWriteHalf>, ResponseReadyToSend> for MyRouter<C, H>
 where
     C: Clone + Sync + Send + 'static,
     H: Handler<C>,

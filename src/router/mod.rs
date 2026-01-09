@@ -15,10 +15,7 @@ where
     R: AsyncRead + Unpin + 'static,
     W: AsyncWrite + Unpin + 'static,
 {
-    fn router(
-        &self,
-        conn: Connection<C, R, W>,
-    ) -> impl Future<Output = Connection<C, R, W, ResponseReadyToSend>>;
+    fn router(&self, conn: Connection<C, R, W>) -> impl Future<Output = Connection<C, R, W, ResponseReadyToSend>>;
     fn invalid_http(
         &self,
         conn: Connection<C, R, W>,
@@ -99,6 +96,7 @@ impl<D, C: Clone + Sync> KurosabiRouter<D, C> {
         let res = HttpResponse::new(writer);
         Connection::new(self.context.clone(), req, res)
     }
+
     pub async fn routing<R, W>(
         &self,
         connection: Connection<C, R, W, NoneBody>,
@@ -111,8 +109,7 @@ impl<D, C: Clone + Sync> KurosabiRouter<D, C> {
         W: AsyncWrite + Unpin + 'static,
     {
         let keep_alive_timeout = keep_alive_timeout.unwrap_or(self.keep_alive_timeout);
-        let http_header_read_timeout =
-            http_header_read_timeout.unwrap_or(self.http_header_read_timeout);
+        let http_header_read_timeout = http_header_read_timeout.unwrap_or(self.http_header_read_timeout);
         let Connection { c, req, res, .. } = connection;
         let res = res.reset();
         let reader = req.into_reader();
@@ -128,7 +125,7 @@ impl<D, C: Clone + Sync> KurosabiRouter<D, C> {
                         Ok(conn) => return RoutingResult::Continue(conn),
                         Err(e) => return RoutingResult::CloseHaveConnection(e),
                     }
-                }
+                },
             },
             Err(_) => return RoutingResult::Close(RouterError::KeepAliveTimeout),
         };
@@ -143,7 +140,7 @@ impl<D, C: Clone + Sync> KurosabiRouter<D, C> {
                         Ok(conn) => return RoutingResult::Continue(conn),
                         Err(e) => return RoutingResult::CloseHaveConnection(e),
                     }
-                }
+                },
             },
             Err(_) => return RoutingResult::Close(RouterError::Timeout),
         };
@@ -153,11 +150,8 @@ impl<D, C: Clone + Sync> KurosabiRouter<D, C> {
             Err(e) => RoutingResult::CloseHaveConnection(e),
         }
     }
-    pub async fn new_connection_loop<R, W>(
-        &self,
-        reader: R,
-        writer: W,
-    ) 
+
+    pub async fn new_connection_loop<R, W>(&self, reader: R, writer: W)
     where
         D: Router<C, R, W, ResponseReadyToSend>,
         R: AsyncRead + Unpin + 'static,
@@ -169,17 +163,16 @@ impl<D, C: Clone + Sync> KurosabiRouter<D, C> {
                 RoutingResult::Continue(c) => c,
                 RoutingResult::Close(_) => {
                     break;
-                }
+                },
                 RoutingResult::CloseHaveConnection(_) => {
                     break;
-                }
+                },
             };
         }
     }
 }
 
-pub enum RoutingResult<T> 
-{
+pub enum RoutingResult<T> {
     Continue(T),
     CloseHaveConnection(ErrorPare<T>),
     Close(RouterError),
