@@ -18,16 +18,22 @@ futures-timer = { version = "3", default-features = false }
 tokio = { version = "1", features = ["full"], optional = true }
 tokio-util = { version = "0.7", features = ["compat"], optional = true }
 
-serde = { version = "1", optional = true }
+serde = { version = "1", features = ["derive"], optional = true }
 serde_json = { version = "1", optional = true }
 
 
 [features]
+default = ["tokio-server","json"]
 tokio-server = ["tokio", "tokio-util"]
 json = ["serde", "serde_json"]
 
 
-[[example]]
-name = "hello"
-path = "examples/hello.rs"
-required-features = ["tokio-server"]
+# [[example]]
+# name = "hello"
+# path = "examples/hello.rs"
+# required-features = ["tokio-server"]
+
+# [[example]]
+# name = "coffee"
+# path = "examples/coffee.rs"
+# required-features = ["tokio-server", "json"]
