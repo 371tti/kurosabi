@@ -10,7 +10,7 @@ use crate::{
     utils::with_timeout,
 };
 
-pub trait Router<C, R, W, S>: Sync + 'static
+pub trait Router<C, R, W, S>: Sync
 where
     R: AsyncRead + Unpin + 'static,
     W: AsyncWrite + Unpin + 'static,
@@ -31,7 +31,7 @@ pub const DEFAULT_KEEP_ALIVE_TIMEOUT: Duration = Duration::from_secs(60);
 pub const DEFAULT_HTTP_HEADER_READ_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Clone)]
-pub struct KurosabiRouter<D, C: Clone = DefaultContext> {
+pub struct KurosabiRouter<D, C: Clone + Sync = DefaultContext> {
     context: C,
     router: D,
     keep_alive_timeout: Duration,
@@ -58,7 +58,7 @@ impl<D: Default> KurosabiRouter<D, DefaultContext> {
     }
 }
 
-impl<D, C: Clone> KurosabiRouter<D, C> {
+impl<D, C: Clone + Sync> KurosabiRouter<D, C> {
     pub fn with_context(context: C) -> Self
     where
         D: Default,
@@ -89,7 +89,7 @@ impl<D, C: Clone> KurosabiRouter<D, C> {
     }
 }
 
-impl<D, C: Clone> KurosabiRouter<D, C> {
+impl<D, C: Clone + Sync> KurosabiRouter<D, C> {
     pub fn new_connection<R, W>(&self, reader: R, writer: W) -> Connection<C, R, W, NoneBody>
     where
         R: AsyncRead + Unpin + 'static,
