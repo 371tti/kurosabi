@@ -5,7 +5,9 @@ use tokio_util::compat::Compat;
 
 use serde::{Deserialize, Serialize};
 
-use kurosabi::{connection::Connection, http::method::HttpMethod, router::DefaultContext, server::tokio::KurosabiTokioServerBuilder};
+use kurosabi::{
+    connection::Connection, http::method::HttpMethod, router::DefaultContext, server::tokio::KurosabiTokioServerBuilder,
+};
 
 const HTML: &str = r#"<!DOCTYPE html>
 <html lang="en">
@@ -76,7 +78,7 @@ async fn main() -> Result<()> {
                                     Ok(conn) => conn,
                                     Err(p) => p.connection.set_status_code(500u16).text_body(""),
                                 };
-                            }
+                            },
                         };
 
                         let coffee = match (order.milk, order.sugar) {
@@ -94,7 +96,7 @@ async fn main() -> Result<()> {
                             Ok(conn) => conn,
                             Err(p) => p.connection.set_status_code(500u16).text_body(""),
                         }
-                    }
+                    },
                     _ => conn.set_status_code(404u16).no_body(),
                 },
                 _ => conn.set_status_code(405u16).no_body(),

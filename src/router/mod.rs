@@ -21,7 +21,10 @@ where
         &self,
         conn: Connection<C, R, W>,
     ) -> impl Future<Output = Connection<C, R, W, ResponseReadyToSend>> {
-        async move { conn.set_status_code(HttpStatusCode::BadRequest).text_body("Invalid HTTP request") }
+        async move {
+            conn.set_status_code(HttpStatusCode::BadRequest)
+                .text_body("Invalid HTTP request")
+        }
     }
 }
 

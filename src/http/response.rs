@@ -97,7 +97,7 @@ impl<W: AsyncWrite + Unpin + 'static> HttpResponse<W> {
     }
 
     /// 内部バッファへの可変参照を取得する
-    /// 
+    ///
     /// # Safety
     /// HTTPレスポンスの構築の責任はこれであなたのもの
     #[inline]
@@ -107,7 +107,7 @@ impl<W: AsyncWrite + Unpin + 'static> HttpResponse<W> {
 
     /// 内部ライターへの可変参照を取得する
     /// 独自拡張用
-    /// 
+    ///
     /// # Safety
     /// HTTPレスポンスの送信の責任はこれであなたのもの
     #[inline]

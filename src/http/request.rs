@@ -84,9 +84,10 @@ impl<R: AsyncRead + Unpin + 'static> HttpRequest<R> {
     where
         T: serde::de::DeserializeOwned,
     {
-        let body_bytes = self.read_body_bytes().await.map_err(|e| {
-            serde_json::Error::io(e)
-        })?;
+        let body_bytes = self
+            .read_body_bytes()
+            .await
+            .map_err(|e| serde_json::Error::io(e))?;
         serde_json::from_slice(&body_bytes)
     }
 }

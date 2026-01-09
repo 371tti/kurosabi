@@ -1,15 +1,9 @@
-# =========================
-# 全体レイアウト
-# =========================
 max_width = 120
 use_small_heuristics = "Off"
 
 hard_tabs = false
 tab_spaces = 4
 
-# =========================
-# 関数・式
-# =========================
 fn_call_width = 60
 fn_params_layout = "Tall"
 fn_args_layout = "Tall"
@@ -17,37 +11,10 @@ fn_args_layout = "Tall"
 chain_width = 60
 single_line_if_else_max_width = 60
 
-# =========================
-# match / 構造体
-# =========================
 match_block_trailing_comma = true
 struct_lit_width = 40
 struct_variant_width = 40
-enum_discrim_align_threshold = 40
 
-# =========================
-# import
-# =========================
-imports_granularity = "Module"
-group_imports = "StdExternalCrate"
 reorder_imports = true
 
-# =========================
-# コメント
-# =========================
-wrap_comments = true
-comment_width = 80
-normalize_comments = true
-
-# =========================
-# 空白・整形
-# =========================
-space_before_colon = false
-space_after_colon = true
-spaces_around_ranges = true
-type_punctuation_density = "Wide"
-
-# =========================
-# 安定寄り
-# =========================
 newline_style = "Unix"

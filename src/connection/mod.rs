@@ -187,21 +187,29 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
 
     #[inline]
     pub fn xml_body_bytes(self, body: &[u8]) -> Connection<C, R, W, ResponseReadyToSend> {
-        self.set_status_code(HttpStatusCode::OK).xml_body_bytes(body)
+        self.set_status_code(HttpStatusCode::OK)
+            .xml_body_bytes(body)
     }
 
     #[inline]
     pub fn json_body_bytes(self, body: &[u8]) -> Connection<C, R, W, ResponseReadyToSend> {
-        self.set_status_code(HttpStatusCode::OK).json_body_bytes(body)
+        self.set_status_code(HttpStatusCode::OK)
+            .json_body_bytes(body)
     }
 
     #[inline]
     #[cfg(feature = "json")]
-    pub fn json_body_serialized<T>(self, body: &T) -> Result<Connection<C, R, W, ResponseReadyToSend>, JsonSerErrorPare<Connection<C, R, W, NoneBody>>>
+    pub fn json_body_serialized<T>(
+        self,
+        body: &T,
+    ) -> Result<Connection<C, R, W, ResponseReadyToSend>, JsonSerErrorPare<Connection<C, R, W, NoneBody>>>
     where
         T: serde::Serialize,
     {
-        match self.set_status_code(HttpStatusCode::OK).json_body_serialized(body) {
+        match self
+            .set_status_code(HttpStatusCode::OK)
+            .json_body_serialized(body)
+        {
             Ok(conn) => Ok(conn),
             Err(e) => Err(JsonSerErrorPare {
                 serde_error: e.serde_error,
@@ -452,7 +460,10 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
 
     #[inline]
     #[cfg(feature = "json")]
-    pub fn json_body_serialized<T>(mut self, body: &T) -> Result<Connection<C, R, W, ResponseReadyToSend>, JsonSerErrorPare<Connection<C, R, W, StatusSetNoneBody>>>
+    pub fn json_body_serialized<T>(
+        mut self,
+        body: &T,
+    ) -> Result<Connection<C, R, W, ResponseReadyToSend>, JsonSerErrorPare<Connection<C, R, W, StatusSetNoneBody>>>
     where
         T: serde::Serialize,
     {
@@ -465,10 +476,7 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
                     res: self.res,
                     phantom: std::marker::PhantomData,
                 };
-                return Err(JsonSerErrorPare {
-                    serde_error: e,
-                    connection: conn,
-                });
+                return Err(JsonSerErrorPare { serde_error: e, connection: conn });
             },
         };
         self.res.json_body(&serialized);
@@ -579,7 +587,6 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
 }
 
 impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connection<C, R, W, ChunkedResponse> {
-
     #[inline]
     pub async fn send_chunk(&mut self, chunk: &[u8]) -> std::io::Result<()> {
         let chunk_size_hex = format!("{:X}\r\n", chunk.len());

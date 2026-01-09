@@ -8,7 +8,7 @@ async fn main() -> Result<()> {
         .bind([0, 0, 0, 0])
         .port(8080)
         .router_and_build(|conn| async move {
-            match conn.req.method(){
+            match conn.req.method() {
                 HttpMethod::GET => match conn.path_segs().as_ref() {
                     // GET /hello
                     ["hello"] => conn.text_body("Hello, World!"),
@@ -32,8 +32,6 @@ async fn main() -> Result<()> {
                 },
                 _ => conn.set_status_code(405u16).no_body(),
             }
-        },
-    );
+        });
     server.run().await
 }
-
