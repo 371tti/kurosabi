@@ -13,9 +13,11 @@ pub struct HttpResponse<W: AsyncWrite + Unpin + 'static> {
 
 impl<W: AsyncWrite + Unpin + 'static> HttpResponse<W> {
     pub fn new(io_writer: W) -> Self {
+        let mut buf = vec![0; 14];
+        buf.reserve(1024 * 1 - 14);
         HttpResponse {
             io_writer,
-            buf: vec![0; 14],
+            buf,
             headers: None,
             response_line: HttpResponseLine::new(),
         }

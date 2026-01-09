@@ -3,8 +3,11 @@ use std::ops::Range;
 
 use std::string::String;
 
-use futures_io::AsyncBufRead;
-use futures_util::AsyncBufReadExt;
+use futures_io::AsyncRead;
+use futures_util::AsyncReadExt;
+
+pub const MAX_HEADER_BYTES: usize = 32 * 1024;
+pub const MAX_HEADERS: usize = 128;
 
 #[inline(always)]
 pub fn slice_by_range<'a>(buf: &'a [u8], range: &Range<usize>) -> &'a [u8] {
@@ -22,6 +25,32 @@ fn trim_ascii_range(buf: &[u8], mut range: Range<usize>) -> Range<usize> {
     range
 }
 
+#[inline(always)]
+fn find_header_end(buf: &[u8], start: usize) -> Option<usize> {
+    // start..buf.len() の範囲で探す
+    let mut i = start;
+
+    // \r\n\r\n
+    while i + 3 < buf.len() {
+        if buf[i] == b'\r' && buf[i + 1] == b'\n' && buf[i + 2] == b'\r' && buf[i + 3] == b'\n' {
+            return Some(i + 4);
+        }
+        i += 1;
+    }
+
+    // \n\n（CRが無い入力用のフォールバック）
+    let mut j = start;
+    while j + 1 < buf.len() {
+        if buf[j] == b'\n' && buf[j + 1] == b'\n' {
+            return Some(j + 2);
+        }
+        j += 1;
+    }
+
+    None
+}
+
+#[derive(Debug, Clone)]
 pub struct HttpHeader {
     /// 線形探索のほうが高速な場合が多かったため
     headers: Vec<HeaderEntry>,
@@ -36,7 +65,7 @@ struct HeaderEntry {
 
 impl HttpHeader {
     pub fn new() -> Self {
-        HttpHeader { headers: Vec::new() }
+        HttpHeader { headers: Vec::with_capacity(32) }
     }
 
     #[inline(always)]
@@ -143,41 +172,57 @@ impl HttpHeader {
 
 impl HttpHeader {
     #[inline(always)]
-    pub async fn parse_async<R>(reader: &mut R, buf: &mut Vec<u8>) -> Option<HttpHeader>
+    pub async fn parse_async<R>(reader: &mut R, buf: &mut Vec<u8>, start: usize) -> Option<(HttpHeader, usize)>
     where
-        R: AsyncBufRead + Unpin,
+        R: AsyncRead + Unpin,
     {
-        const MAX_HEADER_BYTES: usize = 32 * 1024; // 好みで調整
-        const MAX_HEADERS: usize = 128; // 好みで調整
+        // まずはヘッダ終端を探しつつ buf に追記
+        let header_end = loop {
+            // 既存の追記済み領域で終端が見つかるかチェック
+            if let Some(end) = find_header_end(buf, start) {
+                break end;
+            }
 
+            // まだなら追加で読む
+            let mut tmp = [0u8; 4096];
+            let n = reader.read(&mut tmp).await.ok()?;
+            if n == 0 {
+                return None; // EOF
+            }
+            buf.extend_from_slice(&tmp[..n]);
+
+            // サイズ制限（start以降の増分だけをカウント）
+            if buf.len() - start > MAX_HEADER_BYTES {
+                return None;
+            }
+        };
+
+        let body_start = header_end;
+
+        // 次にヘッダ部を1パスでパース（buf[start..header_end]のみ）
         let mut header = HttpHeader::new();
+        header.headers.clear();
 
-        let mut total = 0usize;
-
-        // 参照スライスを保持する前に、ヘッダ全体を buf に読み切る。
-        // そうしないと、&[u8] を保持したまま buf を伸長できず借用エラーになる。
-        let start = buf.len();
+        let mut cursor = start;
         let mut header_lines = 0usize;
 
-        loop {
-            // read_until は '\n' を含めて入る
-            let cursor = buf.len();
-            let n = reader.read_until(b'\n', buf).await.ok()?;
-            if n == 0 {
-                // EOF
+        while cursor < header_end {
+            // 1行切り出し（\n まで）
+            let mut line_end = cursor;
+            while line_end < header_end && buf[line_end] != b'\n' {
+                line_end += 1;
+            }
+            if line_end >= header_end {
+                // ヘッダ終端は見つかっているので、ここに来るなら壊れてる
                 return None;
             }
+            line_end += 1; // include '\n'
 
-            let line_end = cursor + n;
-            let line = &buf[cursor..line_end];
+            let line_start = cursor;
+            cursor = line_end;
 
-            total += n;
-            if total > MAX_HEADER_BYTES {
-                // ヘッダ肥大化防止（431相当）
-                return None;
-            }
-
-            // 空行（CRLF or LF）でヘッダ終端
+            // 空行なら終端（ただし header_end で既に区切ってるので通常ここで終わる）
+            let line = &buf[line_start..line_end];
             if line == b"\n" || line == b"\r\n" {
                 break;
             }
@@ -186,49 +231,26 @@ impl HttpHeader {
             if header_lines > MAX_HEADERS {
                 return None;
             }
-        }
 
-        // ヘッダ行数に応じて Vec を事前確保
-        header.headers.reserve(header_lines);
-
-        // 2パス目：ここから先は buf を伸ばさないので、Range(オフセット)を保持できる。
-        let end = buf.len();
-        let mut cursor = start;
-        while cursor < end {
-            let rel_nl = match buf[cursor..end].iter().position(|&b| b == b'\n') {
-                Some(i) => i,
-                None => break,
-            };
-            let line_start = cursor;
-            let line_end = cursor + rel_nl + 1;
-            let line = &buf[line_start..line_end];
-            cursor = line_end;
-
-            // 空行（CRLF or LF）でヘッダ終端
-            if line == b"\n" || line == b"\r\n" {
-                break;
-            }
-
-            // 末尾の LF/CRLF を取り除く（key/value の Range 用）
+            // 末尾の LF/CRLF を除いた content 範囲
             let mut content_end = line_end - 1; // exclude '\n'
             if content_end > line_start && buf[content_end - 1] == b'\r' {
                 content_end -= 1;
             }
             let content = line_start..content_end;
 
-            // ':' で2つの Range にZero-copy分割
-            let line_slice = &buf[content.start..content.end];
-            let colon_rel = match line_slice.iter().position(|&b| b == b':') {
-                Some(i) => i,
-                None => return None,
-            };
+            // ':' を探す（単純ループでOK。必要なら後でmemchr化）
+            let mut colon = content.start;
+            while colon < content.end && buf[colon] != b':' {
+                colon += 1;
+            }
+            if colon == content.end {
+                return None;
+            }
 
-            let key_range = content.start..(content.start + colon_rel);
-            let value_range = (content.start + colon_rel + 1)..content.end;
+            let key_range = trim_ascii_range(buf, content.start..colon);
+            let value_range = trim_ascii_range(buf, (colon + 1)..content.end);
 
-            // 先頭と末尾の空白を取り除く
-            let key_range = trim_ascii_range(buf, key_range);
-            let value_range = trim_ascii_range(buf, value_range);
             header.headers.push(HeaderEntry {
                 key: key_range,
                 value: value_range,
@@ -236,6 +258,6 @@ impl HttpHeader {
             });
         }
 
-        Some(header)
+        Some((header, body_start))
     }
 }

@@ -149,18 +149,24 @@ impl<C: Clone + Sync + Send> KurosabiTokioServerBuilder<C> {
 impl<C: Clone + Sync + Send + 'static, H: Handler<C>> KurosabiTokioServer<C, H> {
     pub async fn run(self) -> std::io::Result<()> {
         let socket = TcpSocket::new_v4()?;
-        socket.bind(SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::from_octets(self.bind), self.port)))?;
+        let addr = SocketAddrV4::new(Ipv4Addr::from_octets(self.bind), self.port);
+        socket.bind(SocketAddr::V4(addr))?;
 
         let listener = socket.listen(self.tcp_backlog)?;
 
         // 同時に処理する接続数を制限
         let sem = Arc::new(Semaphore::new(self.limit_handle_num));
+        let router = self.router;
 
-        loop {
+        loop {  
             let (stream, _addr) = listener.accept().await?;
-            let permit = sem.clone().acquire_owned().await.unwrap();
-
-            let router_ref = self.router.clone();
+            let permit = sem
+                .clone()
+                .acquire_owned()
+                .await
+                .expect("Semaphore unexpectedly closed");
+            
+            let router_ref = router.clone();
             tokio::spawn(async move {
                 let _permit = permit; // dropで返却される
                 let (reader, writer) = stream.into_split();

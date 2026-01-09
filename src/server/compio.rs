@@ -123,8 +123,6 @@ impl<C: Clone + Sync + Send> KurosabiCompioServerBuilder<C> {
 impl<C: Clone + Sync + Send + 'static, H: Handler<C>> KurosabiCompioServer<C, H> {
     pub async fn run(self) -> std::io::Result<()> {
         let listener = TcpListener::bind((self.bind.as_str(), self.port)).await?;
-        println!("listening on {}:{}", self.bind, self.port);
-
         loop {
             let (stream, _addr) = listener.accept().await?;
             let router_ref = self.router.clone();

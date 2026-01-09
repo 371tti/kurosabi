@@ -1,7 +1,7 @@
 use std::ops::Range;
 
-use futures_io::{AsyncBufRead, AsyncRead};
-use futures_util::{AsyncBufReadExt, AsyncReadExt, io::BufReader};
+use futures_io::AsyncRead;
+use futures_util::AsyncReadExt;
 
 use crate::{
     error::RouterError,
@@ -9,8 +9,11 @@ use crate::{
 };
 
 pub struct HttpRequest<R: AsyncRead + Unpin + 'static> {
-    io_reader: BufReader<R>,
+    io_reader: R,
     buf: Vec<u8>,
+    // 0 => no readed body yet
+    body_start: usize,
+    headers_start: usize,
     /// headers のライフタイムは 'static
     /// つまりbufと同じ
     headers: HttpHeader,
@@ -48,7 +51,7 @@ impl<R: AsyncRead + Unpin + 'static> HttpRequest<R> {
 
     #[inline(always)]
     pub(crate) fn into_reader(self) -> R {
-        self.io_reader.into_inner()
+        self.io_reader
     }
 
     #[inline(always)]
@@ -58,24 +61,39 @@ impl<R: AsyncRead + Unpin + 'static> HttpRequest<R> {
         } else {
             0
         };
+        let have = self.buf.len().saturating_sub(self.body_start);
+        if have < content_length {
+            let need = content_length - have;
 
-        let mut body_buf = vec![0u8; content_length];
-        self.io_reader.read_exact(&mut body_buf).await?;
-        Ok(body_buf)
+            // buf を need 分だけ伸ばして、その領域に read_exact
+            let old_len = self.buf.len();
+            self.buf.resize(old_len + need, 0);
+
+            self.io_reader.read_exact(&mut self.buf[old_len..old_len + need]).await?;
+        }
+        Ok(self.buf.split_off(self.body_start))
     }
 
     #[inline(always)]
     pub async fn read_body_bytes_size(&mut self, size: usize) -> std::io::Result<Vec<u8>> {
-        let mut body_buf = vec![0u8; size];
-        self.io_reader.read_exact(&mut body_buf).await?;
-        Ok(body_buf)
+        let have = self.buf.len().saturating_sub(self.body_start);
+        if have < size {
+            let need = size - have;
+
+            // buf を need 分だけ伸ばして、その領域に read_exact
+            let old_len = self.buf.len();
+            self.buf.resize(old_len + need, 0);
+
+            self.io_reader.read_exact(&mut self.buf[old_len..old_len + need]).await?;
+        }
+        Ok(self.buf.split_off(self.body_start))
     }
 
     #[inline(always)]
     pub async fn read_body_to_end(&mut self) -> std::io::Result<Vec<u8>> {
-        let mut body_buf = Vec::new();
-        self.io_reader.read_to_end(&mut body_buf).await?;
-        Ok(body_buf)
+        let mut body = self.buf.split_off(self.body_start);
+        self.io_reader.read_to_end(&mut body).await?;
+        Ok(body)
     }
 
     #[inline(always)]
@@ -95,8 +113,10 @@ impl<R: AsyncRead + Unpin + 'static> HttpRequest<R> {
 impl<R: AsyncRead + Unpin + 'static> HttpRequest<R> {
     pub fn new(io_reader: R) -> Self {
         HttpRequest {
-            io_reader: BufReader::new(io_reader),
-            buf: Vec::with_capacity(64),
+            io_reader,
+            buf: Vec::with_capacity(1024 * 1),
+            body_start: 0,
+            headers_start: 0,
             headers: HttpHeader::new(),
             request_line: HttpRequestLine::new(),
         }
@@ -104,7 +124,7 @@ impl<R: AsyncRead + Unpin + 'static> HttpRequest<R> {
 
     #[inline(always)]
     pub async fn parse_request_line(mut self) -> Result<HttpRequest<R>, HttpRequest<R>> {
-        let request_line = match HttpRequestLine::parse_async(&mut self.io_reader, &mut self.buf).await {
+        let (request_line, headers_start) = match HttpRequestLine::parse_async(&mut self.io_reader, &mut self.buf).await {
             Ok(line) => line,
             Err(e) => {
                 let line = HttpRequestLine {
@@ -119,6 +139,8 @@ impl<R: AsyncRead + Unpin + 'static> HttpRequest<R> {
                 return Err(HttpRequest {
                     io_reader: self.io_reader,
                     buf: self.buf,
+                    body_start: 0,
+                    headers_start: 0,
                     headers: HttpHeader::new(),
                     request_line: line,
                 });
@@ -127,6 +149,8 @@ impl<R: AsyncRead + Unpin + 'static> HttpRequest<R> {
         Ok(HttpRequest {
             io_reader: self.io_reader,
             buf: self.buf,
+            body_start: 0,
+            headers_start: headers_start,
             headers: self.headers,
             request_line,
         })
@@ -134,12 +158,13 @@ impl<R: AsyncRead + Unpin + 'static> HttpRequest<R> {
 
     #[inline(always)]
     pub async fn parse_request(mut self) -> Result<HttpRequest<R>, HttpRequest<R>> {
-        let headers = match HttpHeader::parse_async(&mut self.io_reader, &mut self.buf).await {
+        let (headers, body_start) = match HttpHeader::parse_async(&mut self.io_reader, &mut self.buf, self.headers_start).await {
             Some(headers) => headers,
             None => {
                 return Err(self);
             },
         };
+        self.body_start = body_start;
         self.headers = headers;
         Ok(self)
     }
@@ -161,14 +186,27 @@ impl HttpRequestLine {
     }
 
     #[inline(always)]
-    pub async fn parse_async<R: AsyncBufRead + Unpin + 'static>(
+    pub async fn parse_async<R: AsyncRead + Unpin + 'static>(
         reader: &mut R,
         buf: &mut Vec<u8>,
-    ) -> Result<HttpRequestLine, RouterError> {
+    ) -> Result<(HttpRequestLine, usize), RouterError> {
         let start = buf.len();
-        let n = reader.read_until(b'\n', buf).await.map_err(|_| {
+        // Read bytes into buf until we find a newline or EOF
+        let mut temp_buf = [0u8; 1024];
+        let mut n = 0;
+        loop {
+            let read_bytes = reader.read(&mut temp_buf).await.map_err(|_| {
             RouterError::InvalidHttpRequest(start..buf.len(), "Failed to read request line".to_string())
-        })?;
+            })?;
+            if read_bytes == 0 {
+            break;
+            }
+            buf.extend_from_slice(&temp_buf[..read_bytes]);
+            if let Some(pos) = buf[start..].iter().position(|&b| b == b'\n') {
+            n = pos + 1;
+            break;
+            }
+        }
 
         if n == 0 {
             return Err(RouterError::InvalidHttpRequest(
@@ -244,6 +282,7 @@ impl HttpRequestLine {
             },
         };
 
-        Ok(HttpRequestLine { method, path: path_range, version })
+        let headers_start = start + n;
+        Ok((HttpRequestLine { method, path: path_range, version }, headers_start))
     }
 }
