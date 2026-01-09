@@ -22,9 +22,8 @@ pub struct KurosabiCompioServer<C: Clone + Sync + Send, H> {
     port: u16,
 }
 
-pub trait Handler<C>: Clone + Send + Sync + 'static {
+pub trait Handler<C>: Clone + Sync + 'static {
     type Fut: Future<Output = Connection<C, AsyncStream<OwnedReadHalf<TcpStream>>, AsyncStream<OwnedWriteHalf<TcpStream>>, ResponseReadyToSend>>
-        + Send
         + 'static;
 
     fn call(&self, conn: Connection<C, AsyncStream<OwnedReadHalf<TcpStream>>, AsyncStream<OwnedWriteHalf<TcpStream>>>) -> Self::Fut;
@@ -32,9 +31,8 @@ pub trait Handler<C>: Clone + Send + Sync + 'static {
 
 impl<C, F, Fut> Handler<C> for F
 where
-    F: Fn(Connection<C, AsyncStream<OwnedReadHalf<TcpStream>>, AsyncStream<OwnedWriteHalf<TcpStream>>>) -> Fut + Clone + Send + Sync + 'static,
+    F: Fn(Connection<C, AsyncStream<OwnedReadHalf<TcpStream>>, AsyncStream<OwnedWriteHalf<TcpStream>>>) -> Fut + Clone + Sync + 'static,
     Fut: Future<Output = Connection<C, AsyncStream<OwnedReadHalf<TcpStream>>, AsyncStream<OwnedWriteHalf<TcpStream>>, ResponseReadyToSend>>
-        + Send
         + 'static,
 {
     type Fut = Fut;
@@ -114,9 +112,8 @@ impl<C: Clone + Sync + Send> KurosabiCompioServerBuilder<C> {
 
     pub fn router_and_build<F, Fut>(self, handler: F) -> KurosabiCompioServer<C, F>
     where
-        F: Fn(Connection<C, AsyncStream<OwnedReadHalf<TcpStream>>, AsyncStream<OwnedWriteHalf<TcpStream>>>) -> Fut + Clone + Send + Sync + 'static,
+        F: Fn(Connection<C, AsyncStream<OwnedReadHalf<TcpStream>>, AsyncStream<OwnedWriteHalf<TcpStream>>>) -> Fut + Clone + Sync + 'static,
         Fut: Future<Output = Connection<C, AsyncStream<OwnedReadHalf<TcpStream>>, AsyncStream<OwnedWriteHalf<TcpStream>>, ResponseReadyToSend>>
-            + Send
             + 'static,
     {
         self.router_and_build_inner(handler)

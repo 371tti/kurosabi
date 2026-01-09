@@ -26,7 +26,7 @@ compio-io = { version = "0.8", features = ["compat"], optional = true }
 
 
 [features]
-default = []
+default = ["compio-server"]
 tokio-server = ["tokio", "tokio-util"]
 compio-server = ["compio", "compio-io"]
 json = ["serde", "serde_json"]
