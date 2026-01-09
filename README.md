@@ -2,139 +2,99 @@
 <h1 style="font-size: 50px">🔥kurosabi🔥</h1>
 </div>
 
-[jp](https://github.com/371tti/kurosabi/blob/master/README-jp.md) | (en)
+kurosabiは、Rustの安全性と並列性を活かした、超軽量・高速・シンプルなWebバックエンドルーターです。
 
-kurosabi is an ultra-lightweight, fast, and simple web backend router that leverages Rust's safety and parallelism.
-
-We value performance, lightweight design, and ease of use.
+パフォーマンスと軽量さ、書きやすさ、シンプルさを大事にします
 
 ## ToDo
-- Initial Implementation
-  - [x] Implement http_server
-  - [x] Implement router
-  - [x] Implement basic syntax
-- Feature Additions 1
-  - [x] Implement keep_alive
-  - [x] Add server configuration
-  - [x] Add response-related features
-- Optimization 1
-  - [x] Fix keep_alive
-  - [x] Add html format macro
-  - [x] Improve to allow direct TCP stream manipulation
-- Breaking Changes 1
-  - [x] Aggregate everything into Context for easier syntax
-  - [x] Improve http_server for higher throughput
-- Optimization 2
-  - [ ] Improve port handling for TCP operations on Linux
-  - [ ] Make error handling easier
-  - [x] Support for middleware
-  - [ ] Enhance security
+- Rewrite
+  - [x] 基本的な機能の実装
+  - [x] server 抽象化の実装
+  - [x] レスポンス種の充実
+  - [x] パフォーマンスチューニング
+- しばらく使って改善探す
 
-## Features
-- Ultra-lightweight and fast
-- Simple and expressive routing
-- Async handler support
-- Path parameters and wildcards
-- JSON and file responses
-- Custom context support
-- Easy 404 and error handling
-- Flexible server configuration
+## 特徴
+- 超軽量・高速・小依存
+- シンプルで表現力の高いルーティング
+- 非同期ハンドラ対応
+- JSON・ファイルレスポンス
+- カスタムコンテキスト対応
+- 404やエラー処理が簡単
 
-## Installation
-Add the following to your `Cargo.toml`:
+
+## インストール
+`Cargo.toml`に以下を追加してください：
 
 ```toml
 [dependencies]
-kurosabi = "0.4" # Use the latest version
+kurosabi = "0.6"
 ```
 
-## Try it out
-You can see a demo in the examples with the following command:
+## 試す
+以下のコマンドでexamplesのデモを見れます。
 ```
-cargo run --example start
+cargo run --example hello --features="tokio-server"
 ```
 
-## Getting Started
+## はじめかた
+tokioでの場合
 
-### 1. Import
+### 1. Cargo.toml
+```toml
+[dependencies]
+kurosabi = { version = "0.6", features = ["tokio-server"] }
+```
+
+### 2. サーバー作成とルート追加と実行
 ```rust
-use kurosabi::{Kurosabi, kurosabi::Context};
-```
+use std::io::Result;
 
-### 2. Create the server, add routes, and run
-```rust
-fn main() {
-    // Create an instance of Kurosabi
-    let mut kurosabi = Kurosabi::new();
+use kurosabi::{http::HttpMethod, server::tokio::KurosabiTokioServerBuilder};
 
-    // Define a route handler like this.
-    kurosabi.get("/",  |mut c| async move {
-        c.res.text("Hello, Kurosabi!");
-        c
-    });
+#[tokio::main(flavor = "multi_thread", worker_threads = 16)]
+async fn main() -> Result<()> {
+    let server = KurosabiTokioServerBuilder::default()
+        .bind([0, 0, 0, 0])
+        .port(8080)
+        .router_and_build(|conn| async move {
+            match conn.req.method() {
+                HttpMethod::GET => match conn.path_segs().as_ref() {
+                    // GET /hello
+                    ["hello"] => conn.text_body("Hello, World!"),
 
-    // Define a handler for GET "/field/:field/:value"
-    // This handler gets the :field and :value parts from the URL path and returns "Field: {field}, Value: {value}" as a text response.
-    kurosabi.get("/field/:field/:value", |mut c| async move {
-        let field = c.req.path.get_field("field").unwrap_or("unknown".to_string());
-        let value = c.req.path.get_field("value").unwrap_or("unknown".to_string());
-        c.res.text(&format!("Field: {}, Value: {}", field, value));
-        c
-    });
+                    // GET /hello/:name
+                    ["hello", name] => {
+                        let body = format!("Hello, {}!", name);
+                        conn.text_body(body)
+                    },
 
-    // Define a handler for GET "/gurd/*"
-    // This handler gets the * part from the URL path and returns "Gurd: {path}" as a text response.
-    // * is a wildcard and accepts any string.
-    kurosabi.get("/gurd/*", |mut c| async move {
-        let path = c.req.path.get_field("*").unwrap_or("unknown".to_string());
-        c.res.text(&format!("Gurd: {}", path));
-        c
-    });
+                    // GET /anything/:anything...
+                    ["anything", others @ ..] => {
+                        let own: String = others.join("/");
+                        conn.text_body(format!("You requested anything/{}!", own))
+                    },
 
-    // Define a handler for POST "/submit"
-    // This returns the response data as is.
-    kurosabi.post("/submit", |mut c| async move {
-        let body = match c.req.body_form().await {
-            Ok(data) => data,
-            Err(e) => {
-                println!("Error receiving POST data: {}", e);
-                c.res.set_status(400);
-                return c;
+                    // GET /
+                    [""] => conn.text_body("Welcome to the Kurosabi HTTP Server!"),
+
+                    // その他は404
+                    _ => conn.set_status_code(404u16).no_body(),
+                },
+                // GET以外を405
+                _ => conn.set_status_code(405u16).no_body(),
             }
-        };
-        c.res.html(&format!("Received: {:?}", body));
-        c
-    });
-
-    // Define a handler for 404 not found
-    kurosabi.not_found_handler(|mut c| async move {
-        let html = html_format!(
-            "<h1>404 Not Found</h1>
-            <p>The page you are looking for does not exist.</p>
-            <p>debug: {{data}}</p>",
-            data = c.req.header.get_user_agent().unwrap_or("unknown")
-        );
-        c.res.html(&html);
-        c.res.set_status(404);
-        c
-    });
-
-    // Configure and build the server
-    let mut server = kurosabi.server()
-        .host([0, 0, 0, 0])
-        .port(8082)
-        .build();
-
-    // Run the server
-    server.run();
+        },
+    );
+    server.run().await
 }
 ```
 
-## Suggestions
-If you have suggestions, please open an issue.  
-Pull requests are also welcome.
+## 提案
+提案があればぜひissueへ  
+プルリクもまってます
 
 ---
 
-## License
+## ライセンス
 MIT

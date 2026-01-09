@@ -13,6 +13,7 @@ pub enum HttpMethod {
 }
 
 impl HttpMethod {
+    #[inline(always)]
     pub fn as_bytes(&self) -> &'static [u8] {
         match self {
             HttpMethod::GET => b"GET",

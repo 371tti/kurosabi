@@ -19,6 +19,7 @@ pub struct HttpRequest<R: AsyncRead + Unpin + 'static> {
 
 impl<R: AsyncRead + Unpin + 'static> HttpRequest<R> {
     /// Requestに設定されたHeaderから値を取得する
+    #[inline(always)]
     pub async fn header_get<S>(&mut self, key: S) -> Option<&str>
     where
         S: std::borrow::Borrow<str>,
@@ -27,25 +28,30 @@ impl<R: AsyncRead + Unpin + 'static> HttpRequest<R> {
     }
 
     /// get full request path
+    #[inline(always)]
     pub fn path_full(&self) -> &str {
         let path_range = &self.request_line.path;
         std::str::from_utf8(&self.buf[path_range.clone()]).expect("Invalid UTF-8 in request path")
     }
 
     /// get request http method
+    #[inline(always)]
     pub fn method(&self) -> &HttpMethod {
         &self.request_line.method
     }
 
     /// get request http version
+    #[inline(always)]
     pub fn version(&self) -> &HttpVersion {
         &self.request_line.version
     }
 
+    #[inline(always)]
     pub(crate) fn into_reader(self) -> R {
         self.io_reader.into_inner()
     }
 
+    #[inline(always)]
     pub async fn read_body_bytes(&mut self) -> std::io::Result<Vec<u8>> {
         let content_length = if let Some(cl_val) = self.header_get("Content-Length").await {
             cl_val.parse::<usize>().unwrap_or(0)
@@ -58,18 +64,21 @@ impl<R: AsyncRead + Unpin + 'static> HttpRequest<R> {
         Ok(body_buf)
     }
 
+    #[inline(always)]
     pub async fn read_body_bytes_size(&mut self, size: usize) -> std::io::Result<Vec<u8>> {
         let mut body_buf = vec![0u8; size];
         self.io_reader.read_exact(&mut body_buf).await?;
         Ok(body_buf)
     }
 
+    #[inline(always)]
     pub async fn read_body_to_end(&mut self) -> std::io::Result<Vec<u8>> {
         let mut body_buf = Vec::new();
         self.io_reader.read_to_end(&mut body_buf).await?;
         Ok(body_buf)
     }
 
+    #[inline(always)]
     #[cfg(feature = "json")]
     pub async fn read_json_de<T>(&mut self) -> Result<T, serde_json::Error>
     where
@@ -92,6 +101,7 @@ impl<R: AsyncRead + Unpin + 'static> HttpRequest<R> {
         }
     }
 
+    #[inline(always)]
     pub async fn parse_request_line(mut self) -> Result<HttpRequest<R>, HttpRequest<R>> {
         let request_line = match HttpRequestLine::parse_async(&mut self.io_reader, &mut self.buf).await {
             Ok(line) => line,
@@ -121,6 +131,7 @@ impl<R: AsyncRead + Unpin + 'static> HttpRequest<R> {
         })
     }
 
+    #[inline(always)]
     pub async fn parse_request(mut self) -> Result<HttpRequest<R>, HttpRequest<R>> {
         let headers = match HttpHeader::parse_async(&mut self.io_reader, &mut self.buf).await {
             Some(headers) => headers,
@@ -148,6 +159,7 @@ impl HttpRequestLine {
         }
     }
 
+    #[inline(always)]
     pub async fn parse_async<R: AsyncBufRead + Unpin + 'static>(
         reader: &mut R,
         buf: &mut Vec<u8>,

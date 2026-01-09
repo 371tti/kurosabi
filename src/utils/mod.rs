@@ -2,6 +2,7 @@ use futures_timer::Delay;
 use futures_util::future::{Either, select};
 use std::time::Duration;
 
+#[inline(always)]
 pub async fn with_timeout<F, T>(fut: F, dur: Duration) -> Result<T, ()>
 where
     F: std::future::Future<Output = T> + Unpin,

@@ -6,7 +6,7 @@ use futures_util::pin_mut;
 use crate::{
     connection::{Connection, NoneBody, ResponseReadyToSend},
     error::{ErrorPare, RouterError},
-    http::{request::HttpRequest, response::HttpResponse},
+    http::{code::HttpStatusCode, request::HttpRequest, response::HttpResponse},
     utils::with_timeout,
 };
 
@@ -16,15 +16,16 @@ where
     W: AsyncWrite + Unpin + 'static,
 {
     fn router(&self, conn: Connection<C, R, W>) -> impl Future<Output = Connection<C, R, W, ResponseReadyToSend>>;
+    #[inline(always)]
     fn invalid_http(
         &self,
         conn: Connection<C, R, W>,
     ) -> impl Future<Output = Connection<C, R, W, ResponseReadyToSend>> {
-        async move { conn.text_body("HELLO") }
+        async move { conn.set_status_code(HttpStatusCode::BadRequest).text_body("Invalid HTTP request") }
     }
 }
 
-pub const DEFAULT_KEEP_ALIVE_TIMEOUT: Duration = Duration::from_secs(60);
+pub const DEFAULT_KEEP_ALIVE_TIMEOUT: Duration = Duration::from_secs(10);
 pub const DEFAULT_HTTP_HEADER_READ_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Clone)]
@@ -87,6 +88,7 @@ impl<D, C: Clone + Sync> KurosabiRouter<D, C> {
 }
 
 impl<D, C: Clone + Sync> KurosabiRouter<D, C> {
+    #[inline(always)]
     pub fn new_connection<R, W>(&self, reader: R, writer: W) -> Connection<C, R, W, NoneBody>
     where
         R: AsyncRead + Unpin + 'static,
@@ -97,6 +99,7 @@ impl<D, C: Clone + Sync> KurosabiRouter<D, C> {
         Connection::new(self.context.clone(), req, res)
     }
 
+    #[inline(always)]
     pub async fn routing<R, W>(
         &self,
         connection: Connection<C, R, W, NoneBody>,
@@ -151,6 +154,7 @@ impl<D, C: Clone + Sync> KurosabiRouter<D, C> {
         }
     }
 
+    #[inline(always)]
     pub async fn new_connection_loop<R, W>(&self, reader: R, writer: W)
     where
         D: Router<C, R, W, ResponseReadyToSend>,

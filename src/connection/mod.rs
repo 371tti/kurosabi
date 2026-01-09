@@ -40,10 +40,12 @@ pub trait SizedAsyncRead: AsyncRead + Unpin + 'static {
 }
 
 impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static, S: ConnectionState> Connection<C, R, W, S> {
-    pub fn path_seg_iter<'a>(&'a self) -> PathSegmentIterator<'a> {
-        PathSegmentIterator::new(self.req.path_full())
+    #[inline(always)]
+    pub fn path_seg_iter<'a>(&'a self) -> std::str::Split<'a, char> {
+        self.req.path_full()[1..].split('/')
     }
 
+    #[inline(always)]
     pub fn path_segs<'a>(&'a self) -> Box<[&'a str]> {
         self.path_seg_iter().collect::<Box<[_]>>()
     }
@@ -61,6 +63,7 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
 }
 
 impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connection<C, R, W, NoneBody> {
+    #[inline]
     pub fn set_status_code<T>(mut self, status_code: T) -> Connection<C, R, W, StatusSetNoneBody>
     where
         T: Into<u16>,
@@ -74,6 +77,7 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
         }
     }
 
+    #[inline]
     pub fn add_header<K, V>(mut self, key: K, value: V) -> Self
     where
         K: Into<String>,
@@ -83,6 +87,7 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
         self
     }
 
+    #[inline]
     pub fn remove_header<S>(mut self, key: S) -> Self
     where
         S: std::borrow::Borrow<str>,
@@ -91,6 +96,7 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
         self
     }
 
+    #[inline]
     pub fn text_body<T>(self, body: T) -> Connection<C, R, W, ResponseReadyToSend>
     where
         T: Borrow<str> + Sized,
@@ -98,10 +104,12 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
         self.set_status_code(HttpStatusCode::OK).text_body(body)
     }
 
+    #[inline]
     pub fn binary_body(self, body: &[u8]) -> Connection<C, R, W, ResponseReadyToSend> {
         self.set_status_code(HttpStatusCode::OK).binary_body(body)
     }
 
+    #[inline]
     pub fn html_body<T>(self, body: T) -> Connection<C, R, W, ResponseReadyToSend>
     where
         T: Borrow<str> + Sized,
@@ -109,6 +117,7 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
         self.set_status_code(HttpStatusCode::OK).html_body(body)
     }
 
+    #[inline]
     pub fn json_body<T>(self, body: T) -> Connection<C, R, W, ResponseReadyToSend>
     where
         T: Borrow<str> + Sized,
@@ -116,6 +125,7 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
         self.set_status_code(HttpStatusCode::OK).json_body(body)
     }
 
+    #[inline]
     pub fn xml_body<T>(self, body: T) -> Connection<C, R, W, ResponseReadyToSend>
     where
         T: Borrow<str> + Sized,
@@ -123,6 +133,7 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
         self.set_status_code(HttpStatusCode::OK).xml_body(body)
     }
 
+    #[inline]
     pub fn csv_body<T>(self, body: T) -> Connection<C, R, W, ResponseReadyToSend>
     where
         T: Borrow<str> + Sized,
@@ -130,6 +141,7 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
         self.set_status_code(HttpStatusCode::OK).csv_body(body)
     }
 
+    #[inline]
     pub fn css_body<T>(self, body: T) -> Connection<C, R, W, ResponseReadyToSend>
     where
         T: Borrow<str> + Sized,
@@ -137,6 +149,7 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
         self.set_status_code(HttpStatusCode::OK).css_body(body)
     }
 
+    #[inline]
     pub fn js_body<T>(self, body: T) -> Connection<C, R, W, ResponseReadyToSend>
     where
         T: Borrow<str> + Sized,
@@ -144,18 +157,22 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
         self.set_status_code(HttpStatusCode::OK).js_body(body)
     }
 
+    #[inline]
     pub fn png_body(self, body: &[u8]) -> Connection<C, R, W, ResponseReadyToSend> {
         self.set_status_code(HttpStatusCode::OK).png_body(body)
     }
 
+    #[inline]
     pub fn jpg_body(self, body: &[u8]) -> Connection<C, R, W, ResponseReadyToSend> {
         self.set_status_code(HttpStatusCode::OK).jpg_body(body)
     }
 
+    #[inline]
     pub fn gif_body(self, body: &[u8]) -> Connection<C, R, W, ResponseReadyToSend> {
         self.set_status_code(HttpStatusCode::OK).gif_body(body)
     }
 
+    #[inline]
     pub fn svg_body<T>(self, body: T) -> Connection<C, R, W, ResponseReadyToSend>
     where
         T: Borrow<str> + Sized,
@@ -163,18 +180,22 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
         self.set_status_code(HttpStatusCode::OK).svg_body(body)
     }
 
+    #[inline]
     pub fn pdf_body(self, body: &[u8]) -> Connection<C, R, W, ResponseReadyToSend> {
         self.set_status_code(HttpStatusCode::OK).pdf_body(body)
     }
 
+    #[inline]
     pub fn xml_body_bytes(self, body: &[u8]) -> Connection<C, R, W, ResponseReadyToSend> {
         self.set_status_code(HttpStatusCode::OK).xml_body_bytes(body)
     }
 
+    #[inline]
     pub fn json_body_bytes(self, body: &[u8]) -> Connection<C, R, W, ResponseReadyToSend> {
         self.set_status_code(HttpStatusCode::OK).json_body_bytes(body)
     }
 
+    #[inline]
     #[cfg(feature = "json")]
     pub fn json_body_serialized<T>(self, body: &T) -> Result<Connection<C, R, W, ResponseReadyToSend>, JsonSerErrorPare<Connection<C, R, W, NoneBody>>>
     where
@@ -194,12 +215,14 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
         }
     }
 
+    #[inline]
     pub fn no_body(self) -> Connection<C, R, W, ResponseReadyToSend> {
         self.set_status_code(HttpStatusCode::OK).no_body()
     }
 }
 
 impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connection<C, R, W, StatusSetNoneBody> {
+    #[inline]
     pub fn set_status_code<T>(mut self, status_code: T) -> Self
     where
         T: Into<u16>,
@@ -208,6 +231,7 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
         self
     }
 
+    #[inline]
     pub fn add_header<K, V>(mut self, key: K, value: V) -> Self
     where
         K: Into<String>,
@@ -217,6 +241,7 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
         self
     }
 
+    #[inline]
     pub fn remove_header<S>(mut self, key: S) -> Self
     where
         S: std::borrow::Borrow<str>,
@@ -225,6 +250,7 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
         self
     }
 
+    #[inline]
     pub fn text_body<T>(mut self, body: T) -> Connection<C, R, W, ResponseReadyToSend>
     where
         T: Borrow<str> + Sized,
@@ -238,6 +264,7 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
         }
     }
 
+    #[inline]
     pub fn binary_body(mut self, body: &[u8]) -> Connection<C, R, W, ResponseReadyToSend> {
         self.res.binary_body(body);
         Connection {
@@ -248,6 +275,7 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
         }
     }
 
+    #[inline]
     pub fn html_body<T>(mut self, body: T) -> Connection<C, R, W, ResponseReadyToSend>
     where
         T: Borrow<str> + Sized,
@@ -261,6 +289,7 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
         }
     }
 
+    #[inline]
     pub fn json_body<T>(mut self, body: T) -> Connection<C, R, W, ResponseReadyToSend>
     where
         T: Borrow<str> + Sized,
@@ -274,6 +303,7 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
         }
     }
 
+    #[inline]
     pub fn xml_body<T>(mut self, body: T) -> Connection<C, R, W, ResponseReadyToSend>
     where
         T: Borrow<str> + Sized,
@@ -287,6 +317,7 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
         }
     }
 
+    #[inline]
     pub fn csv_body<T>(mut self, body: T) -> Connection<C, R, W, ResponseReadyToSend>
     where
         T: Borrow<str> + Sized,
@@ -300,6 +331,7 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
         }
     }
 
+    #[inline]
     pub fn css_body<T>(mut self, body: T) -> Connection<C, R, W, ResponseReadyToSend>
     where
         T: Borrow<str> + Sized,
@@ -313,6 +345,7 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
         }
     }
 
+    #[inline]
     pub fn js_body<T>(mut self, body: T) -> Connection<C, R, W, ResponseReadyToSend>
     where
         T: Borrow<str> + Sized,
@@ -326,6 +359,7 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
         }
     }
 
+    #[inline]
     pub fn png_body(mut self, body: &[u8]) -> Connection<C, R, W, ResponseReadyToSend> {
         self.res.png_body(body);
         Connection {
@@ -336,6 +370,7 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
         }
     }
 
+    #[inline]
     pub fn jpg_body(mut self, body: &[u8]) -> Connection<C, R, W, ResponseReadyToSend> {
         self.res.jpg_body(body);
         Connection {
@@ -346,6 +381,7 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
         }
     }
 
+    #[inline]
     pub fn gif_body(mut self, body: &[u8]) -> Connection<C, R, W, ResponseReadyToSend> {
         self.res.gif_body(body);
         Connection {
@@ -356,6 +392,7 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
         }
     }
 
+    #[inline]
     pub fn svg_body<T>(mut self, body: T) -> Connection<C, R, W, ResponseReadyToSend>
     where
         T: Borrow<str> + Sized,
@@ -369,6 +406,7 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
         }
     }
 
+    #[inline]
     pub fn pdf_body(mut self, body: &[u8]) -> Connection<C, R, W, ResponseReadyToSend> {
         self.res.pdf_body(body);
         Connection {
@@ -379,6 +417,7 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
         }
     }
 
+    #[inline]
     pub fn xml_body_bytes(mut self, body: &[u8]) -> Connection<C, R, W, ResponseReadyToSend> {
         self.res.xml_body_bytes(body);
         Connection {
@@ -389,6 +428,7 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
         }
     }
 
+    #[inline]
     pub fn json_body_bytes(mut self, body: &[u8]) -> Connection<C, R, W, ResponseReadyToSend> {
         self.res.json_body_bytes(body);
         Connection {
@@ -399,6 +439,7 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
         }
     }
 
+    #[inline]
     pub fn csv_body_bytes(mut self, body: &[u8]) -> Connection<C, R, W, ResponseReadyToSend> {
         self.res.csv_body_bytes(body);
         Connection {
@@ -409,6 +450,7 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
         }
     }
 
+    #[inline]
     #[cfg(feature = "json")]
     pub fn json_body_serialized<T>(mut self, body: &T) -> Result<Connection<C, R, W, ResponseReadyToSend>, JsonSerErrorPare<Connection<C, R, W, StatusSetNoneBody>>>
     where
@@ -438,6 +480,7 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
         })
     }
 
+    #[inline]
     pub fn no_body(mut self) -> Connection<C, R, W, ResponseReadyToSend> {
         self.res.header_add("Content-Length", "0");
         self.res.response_line_write();
@@ -450,6 +493,7 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
         }
     }
 
+    #[inline]
     pub async fn streaming<T>(mut self, mut reader: T) -> ConnectionResult<Connection<C, R, W, ResponseReadyToSend>>
     where
         T: SizedAsyncRead,
@@ -504,6 +548,7 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
         })
     }
 
+    #[inline]
     pub async fn ready_chunked(mut self) -> ConnectionResult<Connection<C, R, W, ChunkedResponse>> {
         self.res.header_add("Transfer-Encoding", "chunked");
         self.res.response_line_write();
@@ -534,6 +579,8 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
 }
 
 impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connection<C, R, W, ChunkedResponse> {
+
+    #[inline]
     pub async fn send_chunk(&mut self, chunk: &[u8]) -> std::io::Result<()> {
         let chunk_size_hex = format!("{:X}\r\n", chunk.len());
         self.res
@@ -544,10 +591,12 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
         self.res.writer().write_all(b"\r\n").await
     }
 
+    #[inline]
     pub async fn send_last_chunk(&mut self) -> std::io::Result<()> {
         self.res.writer().write_all(b"0\r\n\r\n").await
     }
 
+    #[inline]
     pub fn close_chunked(mut self) -> Connection<C, R, W, ResponseReadyToSend> {
         self.res.flag_flushed_buf();
         Connection {
@@ -560,6 +609,7 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
 }
 
 impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connection<C, R, W, ResponseReadyToSend> {
+    #[inline(always)]
     pub(crate) async fn flush(mut self) -> ConnectionResult<Connection<C, R, W, NoneBody>> {
         if self.res.is_flushed() {
             return Ok(Connection {
@@ -602,33 +652,6 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
             req: self.req,
             res: self.res.reset(),
             phantom: std::marker::PhantomData,
-        }
-    }
-}
-
-pub struct PathSegmentIterator<'a> {
-    segs: std::str::Split<'a, char>,
-    next: Option<&'a str>,
-}
-
-impl PathSegmentIterator<'_> {
-    pub fn new<'a>(path: &'a str) -> PathSegmentIterator<'a> {
-        let mut split = path[1..].split('/');
-        let next = split.next();
-        PathSegmentIterator { segs: split, next }
-    }
-}
-
-impl<'a> Iterator for PathSegmentIterator<'a> {
-    type Item = &'a str;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self.next {
-            Some(seg) => {
-                self.next = self.segs.next();
-                if self.next.is_none() { Some(seg) } else { Some(seg) }
-            },
-            None => None,
         }
     }
 }

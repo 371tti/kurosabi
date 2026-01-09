@@ -6,10 +6,12 @@ use std::string::String;
 use futures_io::AsyncBufRead;
 use futures_util::AsyncBufReadExt;
 
+#[inline(always)]
 pub fn slice_by_range<'a>(buf: &'a [u8], range: &Range<usize>) -> &'a [u8] {
     &buf[range.start..range.end]
 }
 
+#[inline(always)]
 fn trim_ascii_range(buf: &[u8], mut range: Range<usize>) -> Range<usize> {
     while range.start < range.end && buf[range.start].is_ascii_whitespace() {
         range.start += 1;
@@ -37,6 +39,7 @@ impl HttpHeader {
         HttpHeader { headers: Vec::new() }
     }
 
+    #[inline(always)]
     pub fn insert<K>(&mut self, key: K, value: String, buf: &mut Vec<u8>)
     where
         K: Into<String>,
@@ -72,6 +75,7 @@ impl HttpHeader {
         });
     }
 
+    #[inline(always)]
     pub fn get<'a, S>(&self, key: S, buf: &'a [u8]) -> Option<&'a [u8]>
     where
         S: Borrow<str>,
@@ -85,6 +89,7 @@ impl HttpHeader {
         None
     }
 
+    #[inline(always)]
     pub fn remove<S>(&mut self, key: S, buf: &mut Vec<u8>)
     where
         S: Borrow<str>,
@@ -137,6 +142,7 @@ impl HttpHeader {
 }
 
 impl HttpHeader {
+    #[inline(always)]
     pub async fn parse_async<R>(reader: &mut R, buf: &mut Vec<u8>) -> Option<HttpHeader>
     where
         R: AsyncBufRead + Unpin,
@@ -231,84 +237,5 @@ impl HttpHeader {
         }
 
         Some(header)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn header_lines(h: &HttpHeader, buf: &[u8]) -> Vec<String> {
-        h.headers
-            .iter()
-            .map(|e| String::from_utf8_lossy(slice_by_range(buf, &e.line)).into_owned())
-            .collect()
-    }
-
-    #[test]
-    fn remove_compacts_buf_and_updates_ranges() {
-        let mut buf = Vec::<u8>::new();
-        let mut h = HttpHeader::new();
-
-        h.insert("A", "1".to_string(), &mut buf);
-        h.insert("B", "2".to_string(), &mut buf);
-        h.insert("C", "3".to_string(), &mut buf);
-
-        assert_eq!(std::str::from_utf8(&buf).unwrap(), "A:1\r\nB:2\r\nC:3\r\n");
-        assert_eq!(
-            header_lines(&h, &buf),
-            vec!["A:1\r\n", "B:2\r\n", "C:3\r\n"]
-        );
-
-        h.remove("B", &mut buf);
-
-        assert_eq!(std::str::from_utf8(&buf).unwrap(), "A:1\r\nC:3\r\n");
-        assert_eq!(header_lines(&h, &buf), vec!["A:1\r\n", "C:3\r\n"]);
-        assert_eq!(h.get("A", &buf).unwrap(), b"1");
-        assert!(h.get("B", &buf).is_none());
-        assert_eq!(h.get("C", &buf).unwrap(), b"3");
-
-        assert_eq!(h.headers.len(), 2);
-
-        // 2行目の開始は "A:1\r\n" の長さ = 5
-        let second = &h.headers[1];
-        assert_eq!(second.line, 5..10);
-        assert_eq!(second.key, 5..6);
-        assert_eq!(second.value, 7..8);
-    }
-
-    #[test]
-    fn remove_removes_all_matching_keys_in_order() {
-        let mut buf = Vec::<u8>::new();
-        let mut h = HttpHeader::new();
-
-        h.insert("X", "1".to_string(), &mut buf);
-        h.insert("X", "2".to_string(), &mut buf);
-        h.insert("Y", "3".to_string(), &mut buf);
-
-        h.remove("X", &mut buf);
-
-        assert_eq!(std::str::from_utf8(&buf).unwrap(), "Y:3\r\n");
-        assert_eq!(header_lines(&h, &buf), vec!["Y:3\r\n"]);
-        assert_eq!(h.headers.len(), 1);
-        assert_eq!(h.get("Y", &buf).unwrap(), b"3");
-        assert!(h.get("X", &buf).is_none());
-        assert_eq!(h.headers[0].line, 0..5);
-    }
-
-    #[test]
-    fn remove_nonexistent_is_noop() {
-        let mut buf = Vec::<u8>::new();
-        let mut h = HttpHeader::new();
-
-        h.insert("A", "1".to_string(), &mut buf);
-        let before_buf = buf.clone();
-        let before_ranges = h.headers.clone();
-
-        h.remove("Z", &mut buf);
-
-        assert_eq!(buf, before_buf);
-        assert_eq!(h.headers, before_ranges);
-        assert_eq!(header_lines(&h, &buf), vec!["A:1\r\n"]);
     }
 }

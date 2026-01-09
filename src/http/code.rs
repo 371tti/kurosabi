@@ -85,6 +85,7 @@ pub struct HttpStatusInfo {
 }
 
 impl HttpStatusCode {
+    #[inline(always)]
     pub fn as_bytes(&self) -> &[u8; 3] {
         match self {
             HttpStatusCode::Continue => b"100",
@@ -278,6 +279,7 @@ impl Into<u16> for HttpStatusCode {
 }
 
 impl From<u16> for HttpStatusCode {
+    #[inline(always)]
     fn from(code: u16) -> Self {
         match code {
             100 => HttpStatusCode::Continue,

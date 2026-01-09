@@ -1,6 +1,6 @@
 [package]
 name = "kurosabi"
-version = "0.5.4"
+version = "0.6.0"
 edition = "2024"
 authors = ["371tti"]
 description = "A lightweight asynchronous HTTP server framework built on Tokio."
@@ -23,17 +23,17 @@ serde_json = { version = "1", optional = true }
 
 
 [features]
-default = ["tokio-server","json"]
+default = []
 tokio-server = ["tokio", "tokio-util"]
 json = ["serde", "serde_json"]
 
 
-# [[example]]
-# name = "hello"
-# path = "examples/hello.rs"
-# required-features = ["tokio-server"]
+[[example]]
+name = "hello"
+path = "examples/hello.rs"
+required-features = ["tokio-server"]
 
-# [[example]]
-# name = "coffee"
-# path = "examples/coffee.rs"
-# required-features = ["tokio-server", "json"]
+[[example]]
+name = "coffee"
+path = "examples/coffee.rs"
+required-features = ["tokio-server", "json"]

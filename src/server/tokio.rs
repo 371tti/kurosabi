@@ -1,4 +1,4 @@
-use std::marker::PhantomData;
+use std::{marker::PhantomData, time::Duration};
 
 use tokio::net::{
     TcpListener,
@@ -8,7 +8,7 @@ use tokio_util::compat::{Compat, TokioAsyncReadCompatExt, TokioAsyncWriteCompatE
 
 use crate::{
     connection::{Connection, ResponseReadyToSend},
-    router::{DefaultContext, KurosabiRouter, Router},
+    router::{DEFAULT_KEEP_ALIVE_TIMEOUT, DefaultContext, KurosabiRouter, Router},
 };
 
 pub struct KurosabiServerBuilder {}
@@ -16,6 +16,8 @@ pub struct KurosabiTokioServerBuilder<C: Clone = DefaultContext> {
     context: C,
     bind: String,
     port: u16,
+    keep_alive_timeout: Duration,
+    http_header_read_timeout: Duration,
 }
 
 pub struct KurosabiTokioServer<C: Clone + Sync + Send, H> {
@@ -41,6 +43,7 @@ where
 {
     type Fut = Fut;
 
+    #[inline(always)]
     fn call(&self, conn: Connection<C, Compat<OwnedReadHalf>, Compat<OwnedWriteHalf>>) -> Self::Fut {
         (self)(conn)
     }
@@ -52,6 +55,8 @@ impl<C: Clone + Sync + Send + Default> KurosabiTokioServerBuilder<C> {
             context: C::default(),
             bind: "0.0.0.0".to_string(),
             port: 8080,
+            keep_alive_timeout: DEFAULT_KEEP_ALIVE_TIMEOUT,
+            http_header_read_timeout: DEFAULT_KEEP_ALIVE_TIMEOUT,
         }
     }
 }
@@ -62,6 +67,8 @@ impl KurosabiTokioServerBuilder<DefaultContext> {
             context: DefaultContext::default(),
             bind: "0.0.0.0".to_string(),
             port: 8080,
+            keep_alive_timeout: DEFAULT_KEEP_ALIVE_TIMEOUT,
+            http_header_read_timeout: DEFAULT_KEEP_ALIVE_TIMEOUT,
         }
     }
 }
@@ -75,6 +82,8 @@ impl<C: Clone + Sync + Send> KurosabiTokioServerBuilder<C> {
             context,
             bind: "0.0.0.0".to_string(),
             port: 8080,
+            keep_alive_timeout: DEFAULT_KEEP_ALIVE_TIMEOUT,
+            http_header_read_timeout: DEFAULT_KEEP_ALIVE_TIMEOUT,
         }
     }
 
@@ -88,13 +97,33 @@ impl<C: Clone + Sync + Send> KurosabiTokioServerBuilder<C> {
         self
     }
 
-    pub fn router_and_build<H>(self, handler: H) -> KurosabiTokioServer<C, H>
+    pub fn keep_alive_timeout(mut self, duration: Duration) -> Self {
+        self.keep_alive_timeout = duration;
+        self
+    }
+
+    pub fn http_header_read_timeout(mut self, duration: Duration) -> Self {
+        self.http_header_read_timeout = duration;
+        self
+    }
+
+    pub(crate) fn router_and_build_inner<H>(self, handler: H) -> KurosabiTokioServer<C, H>
     where
         H: Handler<C>,
     {
         let my_router = MyRouter { handler, _marker: PhantomData };
         let router = KurosabiRouter::with_context_and_router(my_router, self.context);
         KurosabiTokioServer { router, bind: self.bind, port: self.port }
+    }
+
+    pub fn router_and_build<F, Fut>(self, handler: F) -> KurosabiTokioServer<C, F>
+    where
+        F: Fn(Connection<C, Compat<OwnedReadHalf>, Compat<OwnedWriteHalf>>) -> Fut + Clone + Send + Sync + 'static,
+        Fut: Future<Output = Connection<C, Compat<OwnedReadHalf>, Compat<OwnedWriteHalf>, ResponseReadyToSend>>
+            + Send
+            + 'static,
+    {
+        self.router_and_build_inner(handler)
     }
 }
 
@@ -127,6 +156,7 @@ where
     C: Clone + Sync + Send + 'static,
     H: Handler<C>,
 {
+    #[inline(always)]
     async fn router(
         &self,
         conn: Connection<C, Compat<OwnedReadHalf>, Compat<OwnedWriteHalf>>,

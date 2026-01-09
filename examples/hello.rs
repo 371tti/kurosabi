@@ -1,19 +1,15 @@
 use std::io::Result;
 
-use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
-use tokio_util::compat::Compat;
-
-use kurosabi::{connection::Connection, http::method::HttpMethod, router::DefaultContext, server::tokio::KurosabiTokioServerBuilder};
+use kurosabi::{http::HttpMethod, server::tokio::KurosabiTokioServerBuilder};
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 16)]
 async fn main() -> Result<()> {
-    let server = KurosabiTokioServerBuilder::default().router_and_build(
-        |conn: Connection<DefaultContext, Compat<OwnedReadHalf>, Compat<OwnedWriteHalf>>| async move {
-            let method = conn.req.method();
-
-            match method {
+    let server = KurosabiTokioServerBuilder::default()
+        .bind([0, 0, 0, 0])
+        .port(8080)
+        .router_and_build(|conn| async move {
+            match conn.req.method(){
                 HttpMethod::GET => match conn.path_segs().as_ref() {
-
                     // GET /hello
                     ["hello"] => conn.text_body("Hello, World!"),
 

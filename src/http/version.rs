@@ -6,6 +6,7 @@ pub enum HttpVersion {
 }
 
 impl HttpVersion {
+    #[inline(always)]
     pub fn as_bytes(&self) -> &[u8; 8] {
         match self {
             HttpVersion::HTTP10 => b"HTTP/1.0",
@@ -15,6 +16,7 @@ impl HttpVersion {
         }
     }
 
+    #[inline(always)]
     pub fn as_str(&self) -> &'static str {
         match self {
             HttpVersion::HTTP10 => "HTTP/1.0",
