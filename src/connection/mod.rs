@@ -33,7 +33,7 @@ impl ConnectionState for ResponseReadyToSend {}
 pub struct CompletedResponse;
 impl ConnectionState for CompletedResponse {}
 
-pub const STREAM_CHUNK_SIZE: usize = 4096;
+pub const STREAM_CHUNK_SIZE: usize = 1024 * 32; // 32KB
 
 impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static, S: ConnectionState> Connection<C, R, W, S> {
     #[inline(always)]
@@ -517,43 +517,68 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
         self.res.header_add("Content-Length", size.to_string());
         self.res.response_line_write();
         self.res.start_content();
-        let res = self.res.send().await;
+        if let Err(e) = self.res.send().await {
+            let response_ready_conn = Connection {
+                c: self.c,
+                req: self.req,
+                res: self.res,
+                phantom: core::marker::PhantomData,
+            };
+            return Err(ErrorPare {
+                router_error: RouterError::IoError(e),
+                connection: response_ready_conn,
+            });
+        }
 
-        let writer = self.res.writer();
+        let mut buf0 = [0u8; STREAM_CHUNK_SIZE];
+        let mut buf1 = [0u8; STREAM_CHUNK_SIZE];
 
-        let res = if let Err(e) = res {
-            Err(e)
-        } else {
-            let mut buf = [0u8; STREAM_CHUNK_SIZE];
+        let stream_res: std::io::Result<()> = 'brk: {
+            let writer = self.res.writer();
+
+            let mut cur_n = match reader.read(&mut buf0).await {
+                Ok(n) => n,
+                Err(e) => break 'brk Err(e),
+            };
+            let mut cur = &mut buf0;
+            let mut nxt = &mut buf1;
+
             loop {
-                let n = reader.read(&mut buf).await;
-                let n = match n {
-                    Ok(0) => break Ok(()), // EOF
+                if cur_n == 0 {
+                    break Ok(());
+                }
+
+                let write_fut = writer.write_all(&cur[..cur_n]);
+                let read_fut  = reader.read(nxt);
+                
+                // write and read in parallel
+                let (write_res, read_res) = join(write_fut, read_fut).await;
+
+                if let Err(e) = write_res {
+                    break Err(e);
+                }
+                let nxt_n = match read_res {
                     Ok(n) => n,
                     Err(e) => break Err(e),
                 };
-                let res = writer.write_all(&buf[..n]).await;
-                if let Err(e) = res {
-                    break Err(e);
-                }
+
+                core::mem::swap(&mut cur, &mut nxt);
+                cur_n = nxt_n;
             }
         };
-
-        match res {
-            Ok(_) => (),
-            Err(e) => {
-                let response_ready_conn = Connection {
-                    c: self.c,
-                    req: self.req,
-                    res: self.res,
-                    phantom: std::marker::PhantomData,
-                };
-                return Err(ErrorPare {
-                    router_error: RouterError::IoError(e),
-                    connection: response_ready_conn,
-                });
-            },
-        };
+        
+        if let Err(e) = stream_res {
+            let response_ready_conn = Connection {
+                c: self.c,
+                req: self.req,
+                res: self.res,
+                phantom: core::marker::PhantomData,
+            };
+            return Err(ErrorPare {
+                router_error: RouterError::IoError(e),
+                connection: response_ready_conn,
+            });
+        }
 
         Ok(Connection {
             c: self.c,
@@ -562,7 +587,6 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
             phantom: std::marker::PhantomData,
         })
     }
-
 
     #[inline]
     pub async fn streaming_chunked<T>(
