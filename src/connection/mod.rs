@@ -516,7 +516,7 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
         };
         let metadata = match file.metadata().await {
             Ok(m) => Some(m),
-            Err(e) => None,
+            Err(_) => None,
         };
         let start = range.as_ref().map_or(0, |r| r.start as u64);
         let end = range.as_ref().map_or_else(
