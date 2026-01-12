@@ -485,6 +485,9 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
     }
 
     #[inline]
+    #[deprecated(
+        note = "変更される可能性があるため、実務での使用は避けてください。代わりにstreamingメソッドを使用してください。"
+    )]
     #[cfg(feature = "tokio-server")]
     pub async fn file_body<P>(mut self, file_path: P) -> ConnectionResult<Connection<C, R, W, ResponseReadyToSend>>
     where
