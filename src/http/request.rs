@@ -286,3 +286,51 @@ impl HttpRequestLine {
         Ok((HttpRequestLine { method, path: path_range, version }, headers_start))
     }
 }
+
+#[inline]
+pub fn parse_range_header(range: &str) -> Option<Range<usize>> {
+    // 例: "bytes=0-499"
+    let range = range.trim();
+
+    let rest = range.strip_prefix("bytes=")?;
+    // 複数レンジは非対応（"0-1,2-3" など）
+    if rest.contains(',') {
+        return None;
+    }
+
+    let (start_str, end_str) = rest.split_once('-')?;
+
+    match (start_str.is_empty(), end_str.is_empty()) {
+        // "-" だけは無効
+        (true, true) => None,
+
+        // bytes=START-END
+        (false, false) => {
+            let start: usize = start_str.parse().ok()?;
+            let end: usize = end_str.parse().ok()?;
+            if start > end {
+                None
+            } else {
+                Some(start..(end + 1)) // Rangeは半開区間
+            }
+        }
+
+        // bytes=START-
+        (false, true) => {
+            let start: usize = start_str.parse().ok()?;
+            Some(start..usize::MAX)
+        }
+
+        // bytes=-SUFFIX
+        (true, false) => {
+            let suffix: usize = end_str.parse().ok()?;
+            if suffix == 0 {
+                None
+            } else {
+                // 呼び出し側で file_size から計算する前提
+                // ここでは「末尾 suffix bytes」を表す特殊レンジとして返す
+                Some(usize::MAX - suffix + 1..usize::MAX)
+            }
+        }
+    }
+}

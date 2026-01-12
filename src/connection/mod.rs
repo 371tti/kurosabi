@@ -485,6 +485,75 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
     }
 
     #[inline]
+    #[cfg(feature = "tokio-server")]
+    pub async fn file_body<P>(mut self, file_path: P) -> ConnectionResult<Connection<C, R, W, ResponseReadyToSend>>
+    where
+        P: AsRef<std::path::Path>,
+    {
+        use std::ops::Range;
+        use tokio::io::AsyncSeekExt;
+
+        let range: Option<Range<usize>> = self.req.header_get("Range").await.and_then(|r| {
+            crate::http::request::parse_range_header(r)
+        });
+        let mut file = match tokio::fs::File::open(&file_path).await {
+            Ok(f) => f,
+            Err(e) => {
+                let conn = Connection {
+                    c: self.c,
+                    req: self.req,
+                    res: self.res,
+                    phantom: std::marker::PhantomData,
+                };
+                return Err(ErrorPare {
+                    router_error: RouterError::IoError(e),
+                    connection: conn,
+                });
+            },
+        };
+        let metadata = match file.metadata().await {
+            Ok(m) => Some(m),
+            Err(e) => None,
+        };
+        let start = range.as_ref().map_or(0, |r| r.start as u64);
+        let end = range.as_ref().map_or_else(
+            || metadata.as_ref().map_or(0, |m| m.len()),
+            |r| r.end as u64,
+        );
+        let size = end - start;
+        let reader = file.seek(std::io::SeekFrom::Start(start)).await.and_then(|_| {
+            use tokio::io::AsyncReadExt;
+            use tokio_util::compat::TokioAsyncReadCompatExt;
+            Ok(file.take(size).compat())
+        });
+        match reader {
+            Ok(r) => {
+                if range.is_some() {
+                    self.res.set_status_code(HttpStatusCode::PartialContent);
+                    let content_range = format!("bytes {}-{}/{}", start, end - 1, metadata.as_ref().map_or("*".to_string(), |m| m.len().to_string()));
+                    self.res.header_add("Content-Range", content_range);
+                    self.streaming_unchunked(r, size as usize).await
+                } else {
+                    self.res.set_status_code(HttpStatusCode::OK);
+                    self.streaming_unchunked(r, size as usize).await
+                }
+            }
+            Err(e) => {
+                let conn = Connection {
+                    c: self.c,
+                    req: self.req,
+                    res: self.res,
+                    phantom: std::marker::PhantomData,
+                };
+                return Err(ErrorPare {
+                    router_error: RouterError::IoError(e),
+                    connection: conn,
+                });
+            },
+        }
+    }
+
+    #[inline]
     pub fn no_body(mut self) -> Connection<C, R, W, ResponseReadyToSend> {
         self.res.header_add("Content-Length", "0");
         self.res.response_line_write();
@@ -786,3 +855,46 @@ pub struct JsonSerErrorPare<T> {
     pub serde_error: serde_json::Error,
     pub connection: T,
 }
+
+pub struct FileContentBuilder {
+    path: std::path::PathBuf,
+    content_type: ContentType,
+    content_range: ContentRange,
+    content_disposition: ContentDisposition,
+}
+
+enum ContentType {
+    Guess,
+    Custom(String),
+    TextPlain,
+    TextHtml,
+    ApplicationJson,
+    ApplicationXml,
+    TextCsv,
+    TextCss,
+    ApplicationJavascript,
+    ImagePng,
+    ImageJpeg,
+    ImageGif,
+    ImageSvgXml,
+    ApplicationPdf,
+    VideoMp2t,
+    VideoMp4,
+    VideoWebm,
+    VideoOgg,
+}
+
+enum ContentRange {
+    Auto,
+    StartEnd(u64, u64),
+    Start(u64),
+    End(u64),
+    Unsatisfiable,
+}
+
+enum ContentDisposition {
+    Inline,
+    Attachment,
+    AttachmentWithFilename(String),
+}
+
