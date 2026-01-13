@@ -1,6 +1,9 @@
 use futures_io::AsyncWrite;
 use futures_timer::Delay;
-use futures_util::{AsyncWriteExt, future::{Either, select}};
+use futures_util::{
+    AsyncWriteExt,
+    future::{Either, select},
+};
 use std::{io::IoSlice, time::Duration};
 
 #[inline(always)]
@@ -42,12 +45,7 @@ pub fn write_hex_crlf(mut n: usize, out: &mut [u8; 32]) -> &[u8] {
 
 /// Allocation-free write_all for exactly 3 buffers (some may be empty).
 #[inline]
-pub async fn write_all_vectored3<W>(
-    w: &mut W,
-    mut a: &[u8],
-    mut b: &[u8],
-    mut c: &[u8],
-) -> std::io::Result<()>
+pub async fn write_all_vectored3<W>(w: &mut W, mut a: &[u8], mut b: &[u8], mut c: &[u8]) -> std::io::Result<()>
 where
     W: AsyncWrite + Unpin,
 {
@@ -55,13 +53,25 @@ where
         let mut ios = [IoSlice::new(&[]), IoSlice::new(&[]), IoSlice::new(&[])];
         let mut k = 0;
 
-        if !a.is_empty() { ios[k] = IoSlice::new(a); k += 1; }
-        if !b.is_empty() { ios[k] = IoSlice::new(b); k += 1; }
-        if !c.is_empty() { ios[k] = IoSlice::new(c); k += 1; }
+        if !a.is_empty() {
+            ios[k] = IoSlice::new(a);
+            k += 1;
+        }
+        if !b.is_empty() {
+            ios[k] = IoSlice::new(b);
+            k += 1;
+        }
+        if !c.is_empty() {
+            ios[k] = IoSlice::new(c);
+            k += 1;
+        }
 
         let n = w.write_vectored(&ios[..k]).await?;
         if n == 0 {
-            return Err(std::io::Error::new(std::io::ErrorKind::WriteZero, "write_vectored returned 0"));
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::WriteZero,
+                "write_vectored returned 0",
+            ));
         }
 
         let mut left = n;

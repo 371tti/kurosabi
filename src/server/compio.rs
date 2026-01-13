@@ -23,22 +23,43 @@ pub struct KurosabiCompioServer<C: Clone + Sync + Send, H> {
 }
 
 pub trait Handler<C>: Clone + Sync + 'static {
-    type Fut: Future<Output = Connection<C, AsyncStream<OwnedReadHalf<TcpStream>>, AsyncStream<OwnedWriteHalf<TcpStream>>, ResponseReadyToSend>>
-        + 'static;
+    type Fut: Future<
+            Output = Connection<
+                C,
+                AsyncStream<OwnedReadHalf<TcpStream>>,
+                AsyncStream<OwnedWriteHalf<TcpStream>>,
+                ResponseReadyToSend,
+            >,
+        > + 'static;
 
-    fn call(&self, conn: Connection<C, AsyncStream<OwnedReadHalf<TcpStream>>, AsyncStream<OwnedWriteHalf<TcpStream>>>) -> Self::Fut;
+    fn call(
+        &self,
+        conn: Connection<C, AsyncStream<OwnedReadHalf<TcpStream>>, AsyncStream<OwnedWriteHalf<TcpStream>>>,
+    ) -> Self::Fut;
 }
 
 impl<C, F, Fut> Handler<C> for F
 where
-    F: Fn(Connection<C, AsyncStream<OwnedReadHalf<TcpStream>>, AsyncStream<OwnedWriteHalf<TcpStream>>>) -> Fut + Clone + Sync + 'static,
-    Fut: Future<Output = Connection<C, AsyncStream<OwnedReadHalf<TcpStream>>, AsyncStream<OwnedWriteHalf<TcpStream>>, ResponseReadyToSend>>
+    F: Fn(Connection<C, AsyncStream<OwnedReadHalf<TcpStream>>, AsyncStream<OwnedWriteHalf<TcpStream>>>) -> Fut
+        + Clone
+        + Sync
         + 'static,
+    Fut: Future<
+            Output = Connection<
+                C,
+                AsyncStream<OwnedReadHalf<TcpStream>>,
+                AsyncStream<OwnedWriteHalf<TcpStream>>,
+                ResponseReadyToSend,
+            >,
+        > + 'static,
 {
     type Fut = Fut;
 
     #[inline(always)]
-    fn call(&self, conn: Connection<C, AsyncStream<OwnedReadHalf<TcpStream>>, AsyncStream<OwnedWriteHalf<TcpStream>>>) -> Self::Fut {
+    fn call(
+        &self,
+        conn: Connection<C, AsyncStream<OwnedReadHalf<TcpStream>>, AsyncStream<OwnedWriteHalf<TcpStream>>>,
+    ) -> Self::Fut {
         (self)(conn)
     }
 }
@@ -112,9 +133,18 @@ impl<C: Clone + Sync + Send> KurosabiCompioServerBuilder<C> {
 
     pub fn router_and_build<F, Fut>(self, handler: F) -> KurosabiCompioServer<C, F>
     where
-        F: Fn(Connection<C, AsyncStream<OwnedReadHalf<TcpStream>>, AsyncStream<OwnedWriteHalf<TcpStream>>>) -> Fut + Clone + Sync + 'static,
-        Fut: Future<Output = Connection<C, AsyncStream<OwnedReadHalf<TcpStream>>, AsyncStream<OwnedWriteHalf<TcpStream>>, ResponseReadyToSend>>
+        F: Fn(Connection<C, AsyncStream<OwnedReadHalf<TcpStream>>, AsyncStream<OwnedWriteHalf<TcpStream>>>) -> Fut
+            + Clone
+            + Sync
             + 'static,
+        Fut: Future<
+                Output = Connection<
+                    C,
+                    AsyncStream<OwnedReadHalf<TcpStream>>,
+                    AsyncStream<OwnedWriteHalf<TcpStream>>,
+                    ResponseReadyToSend,
+                >,
+            > + 'static,
     {
         self.router_and_build_inner(handler)
     }
@@ -131,7 +161,8 @@ impl<C: Clone + Sync + Send + 'static, H: Handler<C>> KurosabiCompioServer<C, H>
                 let reader: AsyncStream<OwnedReadHalf<TcpStream>> = AsyncStream::new(reader);
                 let writer: AsyncStream<OwnedWriteHalf<TcpStream>> = AsyncStream::new(writer);
                 router_ref.new_connection_loop(reader, writer).await;
-            }).detach();
+            })
+            .detach();
         }
     }
 }
@@ -142,7 +173,8 @@ struct MyRouter<C: Clone + Sync + Send, H> {
     _marker: PhantomData<fn() -> C>,
 }
 
-impl<C, H> Router<C, AsyncStream<OwnedReadHalf<TcpStream>>, AsyncStream<OwnedWriteHalf<TcpStream>>, ResponseReadyToSend> for MyRouter<C, H>
+impl<C, H> Router<C, AsyncStream<OwnedReadHalf<TcpStream>>, AsyncStream<OwnedWriteHalf<TcpStream>>, ResponseReadyToSend>
+    for MyRouter<C, H>
 where
     C: Clone + Sync + Send + 'static,
     H: Handler<C>,
@@ -151,7 +183,8 @@ where
     async fn router(
         &self,
         conn: Connection<C, AsyncStream<OwnedReadHalf<TcpStream>>, AsyncStream<OwnedWriteHalf<TcpStream>>>,
-    ) -> Connection<C, AsyncStream<OwnedReadHalf<TcpStream>>, AsyncStream<OwnedWriteHalf<TcpStream>>, ResponseReadyToSend> {
+    ) -> Connection<C, AsyncStream<OwnedReadHalf<TcpStream>>, AsyncStream<OwnedWriteHalf<TcpStream>>, ResponseReadyToSend>
+    {
         self.handler.call(conn).await
     }
 }

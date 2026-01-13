@@ -1,13 +1,23 @@
-use std::{marker::PhantomData, net::{Ipv4Addr, SocketAddr, SocketAddrV4}, sync::Arc, time::Duration};
+use std::{
+    marker::PhantomData,
+    net::{Ipv4Addr, SocketAddr, SocketAddrV4},
+    sync::Arc,
+    time::Duration,
+};
 
-use tokio::{net::{
-    TcpSocket, tcp::{OwnedReadHalf, OwnedWriteHalf}
-}, sync::Semaphore};
+use tokio::{
+    net::{
+        TcpSocket,
+        tcp::{OwnedReadHalf, OwnedWriteHalf},
+    },
+    sync::Semaphore,
+};
 use tokio_util::compat::{Compat, TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
 
 use crate::{
     connection::{Connection, ResponseReadyToSend},
-    router::{DEFAULT_KEEP_ALIVE_TIMEOUT, DefaultContext, KurosabiRouter, Router}, server::{DEFAULT_LIMIT_HANDLE_NUM, DEFAULT_TCP_BACKLOG},
+    router::{DEFAULT_KEEP_ALIVE_TIMEOUT, DefaultContext, KurosabiRouter, Router},
+    server::{DEFAULT_LIMIT_HANDLE_NUM, DEFAULT_TCP_BACKLOG},
 };
 
 pub struct KurosabiServerBuilder {}
@@ -132,7 +142,13 @@ impl<C: Clone + Sync + Send> KurosabiTokioServerBuilder<C> {
     {
         let my_router = MyRouter { handler, _marker: PhantomData };
         let router = KurosabiRouter::with_context_and_router(my_router, self.context);
-        KurosabiTokioServer { router, bind: self.bind, port: self.port, limit_handle_num: self.limit_handle_num, tcp_backlog: self.tcp_backlog }
+        KurosabiTokioServer {
+            router,
+            bind: self.bind,
+            port: self.port,
+            limit_handle_num: self.limit_handle_num,
+            tcp_backlog: self.tcp_backlog,
+        }
     }
 
     pub fn router_and_build<F, Fut>(self, handler: F) -> KurosabiTokioServer<C, F>
@@ -158,14 +174,14 @@ impl<C: Clone + Sync + Send + 'static, H: Handler<C>> KurosabiTokioServer<C, H> 
         let sem = Arc::new(Semaphore::new(self.limit_handle_num));
         let router = self.router;
 
-        loop {  
+        loop {
             let (stream, _addr) = listener.accept().await?;
             let permit = sem
                 .clone()
                 .acquire_owned()
                 .await
                 .expect("Semaphore unexpectedly closed");
-            
+
             let router_ref = router.clone();
             tokio::spawn(async move {
                 let _permit = permit; // dropで返却される

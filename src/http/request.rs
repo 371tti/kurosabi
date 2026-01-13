@@ -69,7 +69,9 @@ impl<R: AsyncRead + Unpin + 'static> HttpRequest<R> {
             let old_len = self.buf.len();
             self.buf.resize(old_len + need, 0);
 
-            self.io_reader.read_exact(&mut self.buf[old_len..old_len + need]).await?;
+            self.io_reader
+                .read_exact(&mut self.buf[old_len..old_len + need])
+                .await?;
         }
         Ok(self.buf.split_off(self.body_start))
     }
@@ -84,7 +86,9 @@ impl<R: AsyncRead + Unpin + 'static> HttpRequest<R> {
             let old_len = self.buf.len();
             self.buf.resize(old_len + need, 0);
 
-            self.io_reader.read_exact(&mut self.buf[old_len..old_len + need]).await?;
+            self.io_reader
+                .read_exact(&mut self.buf[old_len..old_len + need])
+                .await?;
         }
         Ok(self.buf.split_off(self.body_start))
     }
@@ -124,7 +128,8 @@ impl<R: AsyncRead + Unpin + 'static> HttpRequest<R> {
 
     #[inline(always)]
     pub async fn parse_request_line(mut self) -> Result<HttpRequest<R>, HttpRequest<R>> {
-        let (request_line, headers_start) = match HttpRequestLine::parse_async(&mut self.io_reader, &mut self.buf).await {
+        let (request_line, headers_start) = match HttpRequestLine::parse_async(&mut self.io_reader, &mut self.buf).await
+        {
             Ok(line) => line,
             Err(e) => {
                 let line = HttpRequestLine {
@@ -158,12 +163,13 @@ impl<R: AsyncRead + Unpin + 'static> HttpRequest<R> {
 
     #[inline(always)]
     pub async fn parse_request(mut self) -> Result<HttpRequest<R>, HttpRequest<R>> {
-        let (headers, body_start) = match HttpHeader::parse_async(&mut self.io_reader, &mut self.buf, self.headers_start).await {
-            Some(headers) => headers,
-            None => {
-                return Err(self);
-            },
-        };
+        let (headers, body_start) =
+            match HttpHeader::parse_async(&mut self.io_reader, &mut self.buf, self.headers_start).await {
+                Some(headers) => headers,
+                None => {
+                    return Err(self);
+                },
+            };
         self.body_start = body_start;
         self.headers = headers;
         Ok(self)
@@ -196,15 +202,15 @@ impl HttpRequestLine {
         let mut n = 0;
         loop {
             let read_bytes = reader.read(&mut temp_buf).await.map_err(|_| {
-            RouterError::InvalidHttpRequest(start..buf.len(), "Failed to read request line".to_string())
+                RouterError::InvalidHttpRequest(start..buf.len(), "Failed to read request line".to_string())
             })?;
             if read_bytes == 0 {
-            break;
+                break;
             }
             buf.extend_from_slice(&temp_buf[..read_bytes]);
             if let Some(pos) = buf[start..].iter().position(|&b| b == b'\n') {
-            n = pos + 1;
-            break;
+                n = pos + 1;
+                break;
             }
         }
 
@@ -283,54 +289,79 @@ impl HttpRequestLine {
         };
 
         let headers_start = start + n;
-        Ok((HttpRequestLine { method, path: path_range, version }, headers_start))
+        Ok((
+            HttpRequestLine { method, path: path_range, version },
+            headers_start,
+        ))
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RangeSpec {
+    FromToInclusive { start: u64, end: u64 }, // bytes=START-END (end inclusive)
+    From { start: u64 },                      // bytes=START-
+    Suffix { len: u64 },                      // bytes=-SUFFIX
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RangeParse {
+    Invalid,
+    Valid(RangeSpec),
+}
+
 #[inline]
-pub fn parse_range_header(range: &str) -> Option<Range<usize>> {
-    // 例: "bytes=0-499"
-    let range = range.trim();
-
-    let rest = range.strip_prefix("bytes=")?;
-    // 複数レンジは非対応（"0-1,2-3" など）
+pub fn parse_range_header_value(range_value: &str) -> RangeParse {
+    let s = range_value.trim();
+    let rest = if let Some(v) = s.strip_prefix("bytes=") {
+        v
+    } else if let Some(v) = s.strip_prefix("Bytes=") {
+        v
+    } else {
+        return RangeParse::Invalid;
+    };
     if rest.contains(',') {
-        return None;
+        return RangeParse::Invalid;
     }
+    let (a, b) = match rest.split_once('-') {
+        Some(v) => v,
+        None => return RangeParse::Invalid,
+    };
 
-    let (start_str, end_str) = rest.split_once('-')?;
+    match (a.is_empty(), b.is_empty()) {
+        (true, true) => RangeParse::Invalid,
 
-    match (start_str.is_empty(), end_str.is_empty()) {
-        // "-" だけは無効
-        (true, true) => None,
-
-        // bytes=START-END
         (false, false) => {
-            let start: usize = start_str.parse().ok()?;
-            let end: usize = end_str.parse().ok()?;
+            let start: u64 = match a.parse() {
+                Ok(v) => v,
+                Err(_) => return RangeParse::Invalid,
+            };
+            let end: u64 = match b.parse() {
+                Ok(v) => v,
+                Err(_) => return RangeParse::Invalid,
+            };
             if start > end {
-                None
-            } else {
-                Some(start..(end + 1)) // Rangeは半開区間
+                return RangeParse::Invalid;
             }
-        }
+            RangeParse::Valid(RangeSpec::FromToInclusive { start, end })
+        },
 
-        // bytes=START-
         (false, true) => {
-            let start: usize = start_str.parse().ok()?;
-            Some(start..usize::MAX)
-        }
+            let start: u64 = match a.parse() {
+                Ok(v) => v,
+                Err(_) => return RangeParse::Invalid,
+            };
+            RangeParse::Valid(RangeSpec::From { start })
+        },
 
-        // bytes=-SUFFIX
         (true, false) => {
-            let suffix: usize = end_str.parse().ok()?;
-            if suffix == 0 {
-                None
-            } else {
-                // 呼び出し側で file_size から計算する前提
-                // ここでは「末尾 suffix bytes」を表す特殊レンジとして返す
-                Some(usize::MAX - suffix + 1..usize::MAX)
+            let len: u64 = match b.parse() {
+                Ok(v) => v,
+                Err(_) => return RangeParse::Invalid,
+            };
+            if len == 0 {
+                return RangeParse::Invalid;
             }
-        }
+            RangeParse::Valid(RangeSpec::Suffix { len })
+        },
     }
 }
