@@ -1,4 +1,4 @@
-use std::borrow::Borrow;
+use std::{borrow::Borrow, fs::File};
 
 use futures_io::{AsyncRead, AsyncWrite};
 use futures_util::{AsyncReadExt, AsyncWriteExt, future::join};
@@ -899,5 +899,19 @@ enum ContentDisposition {
     Inline,
     Attachment,
     AttachmentWithFilename(String),
+}
+
+impl FileContentBuilder {
+    fn new<P>(path: P) -> Self
+    where 
+        P: AsRef<std::path::Path>,
+    {
+        FileContentBuilder {
+            path: std::path::PathBuf::new(),
+            content_type: ContentType::Guess,
+            content_range: ContentRange::Auto,
+            content_disposition: ContentDisposition::Inline,
+        }
+    }
 }
 
