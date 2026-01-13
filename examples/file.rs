@@ -12,7 +12,7 @@ async fn main() -> Result<()> {
                 HttpMethod::GET => match conn.path_segs().as_ref() {
                     // GET /hello
                     [ "file", path @ .. ] => {
-                        let path = Path::new("src").join(path.join("/"));
+                        let path = Path::new("./").join(path.join("/"));
                         let content_b = FileContentBuilder::new(path)
                             .inline();
                         conn.file_body(content_b).await.unwrap_or_else(|e|

@@ -823,9 +823,10 @@ pub mod file {
             mut self,
             file_content: FileContentBuilder,
         ) -> ConnectionResult<Connection<C, R, W, ResponseReadyToSend>> {
+
             let mut file_content = match file_content.build().await {
                 Ok(fc) => fc,
-                Err(e) => {
+                Err(_) => {
                     return Ok(self.set_status_code(HttpStatusCode::NotFound).no_body());
                 },
             };
@@ -895,6 +896,9 @@ pub mod file {
                     let disp_value = format!("attachment; filename=\"{}\"", fname);
                     self.res.header_add("Content-Disposition", disp_value);
                 },
+            }
+            if !file_content.force_range {
+                self.res.header_add("Accept-Ranges", "bytes");
             }
             let start = range.start;
             let end = range.end;
