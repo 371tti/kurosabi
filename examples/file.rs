@@ -13,7 +13,7 @@ async fn main() -> Result<()> {
                     // GET /hello
                     ["file", path @ ..] => {
                         let path = Path::new("./").join(path.join("/"));
-                        let content_b = FileContentBuilder::new(path).inline();
+                        let content_b = FileContentBuilder::new(path).inline().limit_range(1024 * 1024);
                         conn.file_body(content_b)
                             .await
                             .unwrap_or_else(|e| e.connection)
