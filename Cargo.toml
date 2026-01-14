@@ -27,7 +27,7 @@ mime_guess = { version = "2", optional = true }
 
 
 [features]
-default = ["tokio-server"]
+default = []
 tokio-server = ["tokio", "tokio-util", "mime_guess"]
 compio-server = ["compio", "compio-io"]
 json = ["serde", "serde_json"]
@@ -42,3 +42,8 @@ required-features = ["tokio-server"]
 name = "coffee"
 path = "examples/coffee.rs"
 required-features = ["tokio-server", "json"]
+
+[[example]]
+name = "file"
+path = "examples/file.rs"
+required-features = ["tokio-server"]
