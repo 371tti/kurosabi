@@ -10,10 +10,10 @@ async fn main() -> Result<()> {
         .router_and_build(|conn| async move {
             match conn.req.method() {
                 HttpMethod::GET => match conn.path_segs().as_ref() {
-                    // GET /hello
+                    // GET /file/:path
                     ["file", path @ ..] => {
                         let path = Path::new("./").join(path.join("/"));
-                        let content_b = FileContentBuilder::new(path).inline().limit_range(1024 * 1024);
+                        let content_b = FileContentBuilder::new(path).inline();
                         conn.file_body(content_b)
                             .await
                             .unwrap_or_else(|e| e.connection)

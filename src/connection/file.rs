@@ -13,7 +13,8 @@ use tokio::io::AsyncSeekExt;
 use tokio_util::compat::TokioAsyncReadCompatExt;
 
 impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connection<C, R, W, NoneBody> {
-    /// range はserver側で許可された範囲内で処理する
+    /// ファイルをレスポンスボディとして送信する
+    /// rangeヘッダを考慮します
     #[inline]
     #[deprecated(
         note = "十分な検証ができていません。streamingメソッドで代替できます。"
@@ -144,6 +145,7 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
     }
 }
 
+/// ファイルレスポンスのビルダ
 pub struct FileContentBuilder {
     path: std::path::PathBuf,
     content_type: ContentType,
@@ -187,6 +189,8 @@ pub enum ContentDisposition {
 }
 
 impl FileContentBuilder {
+    /// 指定したパスのファイルを添付ファイルとしてレスポンスに設定するビルダを作成
+    /// デフォルトはattachment + ファイル名 として設定
     pub fn new<P>(path: P) -> Self
     where
         P: AsRef<std::path::Path>,
@@ -205,6 +209,8 @@ impl FileContentBuilder {
         }
     }
 
+    /// ファイル名を指定
+    /// (inlineでなくなります)
     pub fn name<S>(mut self, file_name: Option<S>) -> Self
     where
         S: Into<String>,
@@ -221,22 +227,28 @@ impl FileContentBuilder {
         self
     }
 
+    /// コンテントタイプを指定
+    /// デフォルトはmime_guessで推測したタイプ
     pub fn content_type(mut self, content_type: ContentType) -> Self {
         self.content_type = content_type;
         self
     }
 
+    /// コンテントレンジの最大値を指定
+    /// rangeリクエスト時、送信するバイト数を制限する
+    /// リソース保証用
     pub fn limit_range(mut self, limit: u64) -> Self {
         self.content_range = ContentRange::AutoWithLimit(limit);
         self
     }
 
+    /// コンテントレンジの強制指定
     pub fn range(mut self, content_range: ContentRange) -> Self {
         self.content_range = content_range;
         self
     }
 
-    pub async fn build(self) -> std::io::Result<FileContent> {
+    pub(crate) async fn build(self) -> std::io::Result<FileContent> {
         let file = File::open(&self.path).await?;
         let metadata = file.metadata().await?;
         let mime_type = match &self.content_type {
