@@ -11,13 +11,12 @@ async fn main() -> Result<()> {
             match conn.req.method() {
                 HttpMethod::GET => match conn.path_segs().as_ref() {
                     // GET /hello
-                    [ "file", path @ .. ] => {
+                    ["file", path @ ..] => {
                         let path = Path::new("./").join(path.join("/"));
-                        let content_b = FileContentBuilder::new(path)
-                            .inline();
-                        conn.file_body(content_b).await.unwrap_or_else(|e|
-                            e.connection
-                        )
+                        let content_b = FileContentBuilder::new(path).inline();
+                        conn.file_body(content_b)
+                            .await
+                            .unwrap_or_else(|e| e.connection)
                     },
                     // GET /
                     [""] => conn.text_body("Welcome to the Kurosabi HTTP Server!"),

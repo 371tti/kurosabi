@@ -165,7 +165,7 @@ impl<C: Clone + Sync + Send> KurosabiTokioServerBuilder<C> {
 impl<C: Clone + Sync + Send + 'static, H: Handler<C>> KurosabiTokioServer<C, H> {
     pub async fn run(self) -> std::io::Result<()> {
         let socket = TcpSocket::new_v4()?;
-        let addr = SocketAddrV4::new(Ipv4Addr::from_octets(self.bind), self.port);
+        let addr = SocketAddrV4::new(Ipv4Addr::from(self.bind), self.port);
         socket.bind(SocketAddr::V4(addr))?;
 
         let listener = socket.listen(self.tcp_backlog)?;
