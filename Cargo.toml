@@ -30,7 +30,7 @@ chardetng = { version = "0.1", optional = true }
 
 
 [features]
-default = []
+default = ["tokio-server", "logging"]
 tokio-server = ["tokio", "tokio-util", "mime_guess", "chardetng"]
 compio-server = ["compio", "compio-io"]
 json = ["serde", "serde_json"]

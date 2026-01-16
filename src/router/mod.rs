@@ -2,10 +2,13 @@ use std::time::Duration;
 
 use futures_io::{AsyncRead, AsyncWrite};
 use futures_util::pin_mut;
+#[cfg(feature = "logging")]
 use log::debug;
+#[cfg(feature = "logging")]
+use crate::connection::ConnectionState;
 
 use crate::{
-    connection::{Connection, ConnectionState, NoneBody, ResponseReadyToSend},
+    connection::{Connection, NoneBody, ResponseReadyToSend},
     error::{ErrorPare, RouterError},
     http::{code::HttpStatusCode, request::HttpRequest, response::HttpResponse},
     utils::with_timeout,
