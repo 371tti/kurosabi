@@ -502,13 +502,15 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
     }
 
     #[inline]
-    pub fn redirect<T>(self, location: T, status_code: Option<C>) -> Connection<C, R, W, ResponseReadyToSend>
+    pub fn redirect<T>(mut self, location: T) -> Connection<C, R, W, ResponseReadyToSend>
     where
         T: Borrow<str> + Sized,
-        C: Into<u16> + From<HttpStatusCode>
     {
+        if let CurrentState::NoneBody = self.state {
+            self = self.set_status_code(HttpStatusCode::Found.into());
+        }
+
         self
-          .set_status_code(status_code.unwrap_or(HttpStatusCode::Found.into()))
           .add_header("Location", location.borrow())
           .no_body()
     }
