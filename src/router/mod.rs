@@ -179,6 +179,7 @@ impl<D, C: Clone + Sync> KurosabiRouter<D, C> {
                 RoutingResult::Close(c) => {
                     #[cfg(feature = "logging")]
                     debug!("Connection closed: {:?}", c);
+                    let _ = c;
                     break;
                 },
                 RoutingResult::CloseHaveConnection(p) => {
@@ -186,6 +187,7 @@ impl<D, C: Clone + Sync> KurosabiRouter<D, C> {
                     http_log(&p.connection);
                     #[cfg(feature = "logging")]
                     debug!("Connection closed: {:?}", p.router_error);
+                    let _ = p;
                     break;
                 },
             };
