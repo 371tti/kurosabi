@@ -30,6 +30,11 @@ impl<R: AsyncRead + Unpin + 'static> HttpRequest<R> {
         std::str::from_utf8(self.headers.get(key, &self.buf)?).ok()
     }
 
+    #[inline(always)]
+    pub fn request_line(&self) -> &HttpRequestLine {
+        &self.request_line
+    }
+
     /// get full request path
     #[inline(always)]
     pub fn path_full(&self) -> &str {

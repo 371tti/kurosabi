@@ -34,10 +34,10 @@ impl fmt::Display for RouterError {
                 write!(f, "RouterError: IO Error - {}", e)
             },
             RouterError::Timeout => {
-                write!(f, "RouterError: Timeout Error")
+                write!(f, "Timeout Error")
             },
             RouterError::KeepAliveTimeout => {
-                write!(f, "RouterError: Keep-Alive Timeout Error")
+                write!(f, "Keep-Alive Timeout Error")
             },
         }
     }

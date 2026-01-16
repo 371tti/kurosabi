@@ -5,6 +5,7 @@ use std::{
     time::Duration,
 };
 
+use log::{debug, info};
 use tokio::{
     net::{
         TcpSocket,
@@ -169,13 +170,17 @@ impl<C: Clone + Sync + Send + 'static, H: Handler<C>> KurosabiTokioServer<C, H> 
         socket.bind(SocketAddr::V4(addr))?;
 
         let listener = socket.listen(self.tcp_backlog)?;
+        #[cfg(feature = "logging")]
+        info!("Server listening on {}:{}", self.bind.iter().map(|b| b.to_string()).collect::<Vec<_>>().join("."), self.port);
 
         // 同時に処理する接続数を制限
         let sem = Arc::new(Semaphore::new(self.limit_handle_num));
         let router = self.router;
 
         loop {
-            let (stream, _addr) = listener.accept().await?;
+            let (stream, addr) = listener.accept().await?;
+            #[cfg(feature = "logging")]
+            debug!("Accepted connection from {}", addr);
             let permit = sem
                 .clone()
                 .acquire_owned()

@@ -4,7 +4,7 @@ use futures_util::{
     AsyncWriteExt,
     future::{Either, select},
 };
-use std::{io::IoSlice, time::Duration};
+use std::{borrow::Cow, io::IoSlice, time::Duration};
 
 #[inline(always)]
 pub async fn with_timeout<F, T>(fut: F, dur: Duration) -> Result<T, ()>
@@ -92,4 +92,145 @@ where
         }
     }
     Ok(())
+}
+
+
+/// RFC3986 unreserved: ALPHA / DIGIT / "-" / "." / "_" / "~"
+#[inline]
+fn is_unreserved(b: u8) -> bool {
+    matches!(b,
+        b'A'..=b'Z' |
+        b'a'..=b'z' |
+        b'0'..=b'9' |
+        b'-' | b'.' | b'_' | b'~'
+    )
+}
+
+/// URL percent-encode（path向け）
+/// - UTF-8 bytes を対象
+/// - unreserved 以外は %HH
+pub fn url_encode(input: &str) -> String {
+    let bytes = input.as_bytes();
+    let mut out = String::with_capacity(bytes.len() * 3);
+
+    for &b in bytes {
+        if is_unreserved(b) || b == b'/' {
+            out.push(b as char);
+        } else {
+            out.push('%');
+            out.push(hex_upper(b >> 4));
+            out.push(hex_upper(b & 0x0F));
+        }
+    }
+    out
+}
+
+#[inline]
+fn hex_upper(n: u8) -> char {
+    match n {
+        0..=9 => (b'0' + n) as char,
+        10..=15 => (b'A' + (n - 10)) as char,
+        _ => unreachable!(),
+    }
+}
+
+/// URL percent-decode（path向け）
+/// - %HH をデコード
+/// - 不正な % / 非UTF-8 は Err
+pub fn url_decode_safe(input: &str) -> Result<Cow<'_, str>, UrlDecodeError> {
+    if !input.as_bytes().contains(&b'%') {
+        return Ok(Cow::Borrowed(input));
+    }
+    let bytes = input.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'%' => {
+                if i + 2 >= bytes.len() {
+                    return Err(UrlDecodeError::InvalidPercent);
+                }
+                let hi = from_hex(bytes[i + 1])?;
+                let lo = from_hex(bytes[i + 2])?;
+                out.push((hi << 4) | lo);
+                i += 3;
+            }
+            b => {
+                out.push(b);
+                i += 1;
+            }
+        }
+    }
+
+    match String::from_utf8(out) {
+        Ok(s) => Ok(Cow::Owned(s)),
+        Err(_) => Err(UrlDecodeError::InvalidUtf8),
+    }
+}
+
+#[inline]
+fn from_hex(b: u8) -> Result<u8, UrlDecodeError> {
+    match b {
+        b'0'..=b'9' => Ok(b - b'0'),
+        b'a'..=b'f' => Ok(b - b'a' + 10),
+        b'A'..=b'F' => Ok(b - b'A' + 10),
+        _ => Err(UrlDecodeError::InvalidHex),
+    }
+}
+
+/// Errなし できるだけ高速な
+/// - '%' が無い場合: Borrowed を返す
+/// - '%HH' はデコードする
+/// - 壊れた '%' は '%' のまま残す
+/// - 生成後に UTF-8 が壊れてたら、その時だけ lossy にする
+#[inline]
+pub fn url_decode_fast(input: &str) -> Cow<'_, str> {
+    let bytes = input.as_bytes();
+
+    if !bytes.contains(&b'%') {
+        return Cow::Borrowed(input);
+    }
+
+    let mut out = Vec::with_capacity(bytes.len());
+
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' {
+            if i + 2 < bytes.len() {
+                if let (Some(hi), Some(lo)) = (hex_val(bytes[i + 1]), hex_val(bytes[i + 2])) {
+                    out.push((hi << 4) | lo);
+                    i += 3;
+                    continue;
+                }
+            }
+            out.push(b'%');
+            i += 1;
+        } else {
+            out.push(bytes[i]);
+            i += 1;
+        }
+    }
+
+    match String::from_utf8(out) {
+        Ok(s) => Cow::Owned(s),
+        Err(e) => Cow::Owned(String::from_utf8_lossy(e.as_bytes()).into_owned()),
+    }
+}
+
+#[inline]
+fn hex_val(b: u8) -> Option<u8> {
+    match b {
+        b'0'..=b'9' => Some(b - b'0'),
+        b'a'..=b'f' => Some(b - b'a' + 10),
+        b'A'..=b'F' => Some(b - b'A' + 10),
+        _ => None,
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum UrlDecodeError {
+    InvalidPercent,
+    InvalidHex,
+    InvalidUtf8,
 }

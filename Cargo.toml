@@ -14,6 +14,8 @@ futures-core = { version = "0.3", default-features = false }
 futures-io   = { version = "0.3", default-features = false }
 futures-util = { version = "0.3", default-features = false, features = ["io"] }
 futures-timer = { version = "3", default-features = false }
+log = { version = "0.4", optional = true }
+env_logger = { version = "0.11.8", optional = true }
 
 tokio = { version = "1", features = ["full"], optional = true }
 tokio-util = { version = "0.7", features = ["compat"], optional = true }
@@ -24,13 +26,15 @@ serde_json = { version = "1", optional = true }
 compio = { version = "0.17", optional = true }
 compio-io = { version = "0.8", features = ["compat"], optional = true }
 mime_guess = { version = "2", optional = true }
+chardetng = { version = "0.1", optional = true }
 
 
 [features]
-default = []
-tokio-server = ["tokio", "tokio-util", "mime_guess"]
+default = ["tokio-server", "logging"]
+tokio-server = ["tokio", "tokio-util", "mime_guess", "chardetng"]
 compio-server = ["compio", "compio-io"]
 json = ["serde", "serde_json"]
+logging = ["log", "env_logger"]
 
 
 [[example]]
@@ -46,4 +50,4 @@ required-features = ["tokio-server", "json"]
 [[example]]
 name = "file"
 path = "examples/file.rs"
-required-features = ["tokio-server"]
+required-features = ["tokio-server", "logging"]

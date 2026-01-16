@@ -156,6 +156,11 @@ impl HttpStatusCode {
         }
     }
 
+    #[inline(always)]
+    pub fn as_str(&self) -> &str {
+        unsafe { std::str::from_utf8_unchecked(self.as_bytes()) }
+    }
+
     pub fn info(&self) -> HttpStatusInfo {
         match self {
             HttpStatusCode::Continue => HttpStatusInfo { code: 100, message: "Continue" },

@@ -272,6 +272,11 @@ impl<W: AsyncWrite + Unpin + 'static> HttpResponse<W> {
         self.response_line.status_code = HttpStatusCode::from(status_code.into());
         self
     }
+
+    #[inline(always)]
+    pub fn status_code(&self) -> HttpStatusCode {
+        self.response_line.status_code
+    }
 }
 
 /// HTTPレスポンスのリクエストライン
