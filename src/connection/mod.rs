@@ -507,14 +507,8 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
         T: Borrow<str> + Sized,
         C: Into<u16> + From<HttpStatusCode>
     {
-        let sc = if let Some(status_code) = status_code {
-            status_code
-        } else {
-            HttpStatusCode::Found.into()
-        };
-
         self
-          .set_status_code(sc)
+          .set_status_code(status_code.unwrap_or(HttpStatusCode::Found.into()))
           .add_header("Location", location.borrow())
           .no_body()
     }
