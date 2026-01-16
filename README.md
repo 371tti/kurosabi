@@ -47,7 +47,7 @@ tokioでの場合
 ### 1. Cargo.toml
 ```toml
 [dependencies]
-kurosabi = { version = "0.7", features = ["tokio-server"] }
+kurosabi = { version = "0.6", features = ["tokio-server"] }
 ```
 
 ### 2. サーバー作成とルート追加と実行
