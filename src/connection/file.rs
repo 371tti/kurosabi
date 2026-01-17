@@ -8,6 +8,7 @@ use crate::utils::url_decode_fast;
 use crate::{connection::ResponseReadyToSend, error::ConnectionResult};
 use futures_io::{AsyncRead, AsyncWrite};
 use mime_guess::mime;
+use std::fs::FileType;
 use std::marker::PhantomData;
 use std::ops::Range;
 use std::path::PathBuf;
@@ -324,7 +325,7 @@ impl FileContentBuilder<FileContentBuilderReady> {
 
     /// ファイルの存在チェックを行う
     /// 無ければ Err としてディレクトリがあるか あればその相対パス一覧を返す
-    pub async fn check_file_exists(mut self) -> Result<Self, Option<Vec<std::path::PathBuf>>> {
+    pub async fn check_file_exists(mut self) -> Result<Self, Option<Vec<DirEntryInfo>>> {
         let path = if self.to_safe {
             self.safe_path_under().map_err(|_| None)?
         } else {
@@ -335,15 +336,16 @@ impl FileContentBuilder<FileContentBuilderReady> {
                 if meta.is_file() {
                     Ok(self)
                 } else if meta.is_dir() {
-                    let mut entries = tokio::fs::read_dir(&path).await.map_err(|_| None)?;
-                    let mut paths = Vec::new();
-                    while let Some(entry) = entries.next_entry().await.map_err(|_| None)? {
-                        let path = entry.path();
-                        if let Ok(rel_path) = path.strip_prefix(&self.base) {
-                            paths.push(rel_path.to_path_buf());
-                        }
+                    let mut dir = tokio::fs::read_dir(&path).await.map_err(|_| None)?;
+                    let mut entries = Vec::new();
+                    while let Some(entry) = dir.next_entry().await.map_err(|_| None)? {
+                        let file_type = entry.file_type().await.map_err(|_| None)?;
+                        entries.push(DirEntryInfo {
+                            path: entry.path(),
+                            kind: file_type,
+                        });
                     }
-                    Err(Some(paths))
+                    Err(Some(entries))
                 } else {
                     Err(None)
                 }
@@ -353,7 +355,7 @@ impl FileContentBuilder<FileContentBuilderReady> {
         }
     }
 
-    pub async fn build(mut self) -> std::io::Result<FileContent> {
+    pub(crate) async fn build(mut self) -> std::io::Result<FileContent> {
         self.path = if self.to_safe {
             self.safe_path_under()?
         } else {
@@ -445,4 +447,9 @@ impl FileContentBuilder<FileContentBuilderReady> {
             is_partly,
         })
     }
+}
+
+pub struct DirEntryInfo {
+    pub path: PathBuf,
+    pub kind: FileType,
 }
