@@ -171,7 +171,15 @@ impl<C: Clone + Sync + Send + 'static, H: Handler<C>> KurosabiTokioServer<C, H> 
 
         let listener = socket.listen(self.tcp_backlog)?;
         #[cfg(feature = "logging")]
-        info!("Server listening on {}:{}", self.bind.iter().map(|b| b.to_string()).collect::<Vec<_>>().join("."), self.port);
+        info!(
+            "Server listening on {}:{}",
+            self.bind
+                .iter()
+                .map(|b| b.to_string())
+                .collect::<Vec<_>>()
+                .join("."),
+            self.port
+        );
 
         // 同時に処理する接続数を制限
         let sem = Arc::new(Semaphore::new(self.limit_handle_num));

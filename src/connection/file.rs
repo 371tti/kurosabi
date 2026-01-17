@@ -20,9 +20,7 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
     /// ファイルをレスポンスボディとして送信する
     /// rangeヘッダを考慮します
     #[inline]
-    #[deprecated(
-        note = "十分な検証ができていません。streamingメソッドで代替できます。"
-    )]
+    #[deprecated(note = "十分な検証ができていません。streamingメソッドで代替できます。")]
     #[cfg(feature = "tokio-server")]
     pub async fn file_body(
         mut self,
@@ -154,7 +152,6 @@ pub struct FileContentBuilderInit;
 impl FileContentBuilderState for FileContentBuilderInit {}
 pub struct FileContentBuilderReady;
 impl FileContentBuilderState for FileContentBuilderReady {}
-
 
 /// ファイルレスポンスのビルダ
 pub struct FileContentBuilder<S = FileContentBuilderInit> {
@@ -368,7 +365,7 @@ impl FileContentBuilder<FileContentBuilderReady> {
             ContentType::Guess => {
                 let mime = mime_guess::from_path(&self.path).first_or_octet_stream();
                 let fmt = match mime.type_() {
-                    mime::TEXT 
+                    mime::TEXT
                     | mime::JSON
                     | mime::XML
                     | mime::JAVASCRIPT
@@ -388,12 +385,12 @@ impl FileContentBuilder<FileContentBuilderReady> {
                         match name {
                             // Unicode
                             "UTF-8" => Some("utf-8"),
-                            
+
                             // Japanese
                             "Shift_JIS" => Some("shift_jis"),
                             "EUC-JP" => Some("euc-jp"),
                             "ISO-2022-JP" => Some("iso-2022-jp"),
-                            
+
                             // Chinese
                             "GBK" => Some("gbk"),
                             "Big5" => Some("big5"),
@@ -409,7 +406,7 @@ impl FileContentBuilder<FileContentBuilderReady> {
                     mime.push_str(fmt);
                 }
                 mime
-            }
+            },
             ContentType::Custom(s) => s.clone(),
         };
         let full_size = metadata.len();

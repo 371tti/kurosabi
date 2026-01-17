@@ -1,11 +1,11 @@
 use std::time::Duration;
 
+#[cfg(feature = "logging")]
+use crate::connection::ConnectionState;
 use futures_io::{AsyncRead, AsyncWrite};
 use futures_util::pin_mut;
 #[cfg(feature = "logging")]
 use log::debug;
-#[cfg(feature = "logging")]
-use crate::connection::ConnectionState;
 
 use crate::{
     connection::{Connection, NoneBody, ResponseReadyToSend},
@@ -175,7 +175,7 @@ impl<D, C: Clone + Sync> KurosabiRouter<D, C> {
                     #[cfg(feature = "logging")]
                     http_log(&c);
                     c
-                }
+                },
                 RoutingResult::Close(c) => {
                     #[cfg(feature = "logging")]
                     debug!("Connection closed: {:?}", c);
@@ -206,7 +206,7 @@ pub struct DefaultContext {}
 
 #[cfg(feature = "logging")]
 fn http_log<C, R, W, S>(c: &Connection<C, R, W, S>)
-where 
+where
     R: AsyncRead + Unpin + 'static,
     W: AsyncWrite + Unpin + 'static,
     S: ConnectionState,
@@ -218,24 +218,98 @@ where
     let status = c.res.status_code();
     let path = c.req.path_full();
     let req_log = match method {
-        crate::http::HttpMethod::GET => format!("\x1b[1;32m{}\x1b[0m \x1b[37m{}\x1b[0m \x1b[37m{}\x1b[0m", method.as_str(), path, version),      // 太字緑
-        crate::http::HttpMethod::POST => format!("\x1b[1;35m{}\x1b[0m \x1b[37m{}\x1b[0m \x1b[37m{}\x1b[0m", method.as_str(), path, version),     // 太字桃
-        crate::http::HttpMethod::PUT => format!("\x1b[1;33m{}\x1b[0m \x1b[37m{}\x1b[0m \x1b[37m{}\x1b[0m", method.as_str(), path, version),      // 太字黄
-        crate::http::HttpMethod::DELETE => format!("\x1b[1;31m{}\x1b[0m \x1b[37m{}\x1b[0m \x1b[37m{}\x1b[0m", method.as_str(), path, version),   // 太字赤
-        crate::http::HttpMethod::HEAD => format!("\x1b[1;36m{}\x1b[0m \x1b[37m{}\x1b[0m \x1b[37m{}\x1b[0m", method.as_str(), path, version),     // 太字シアン
-        crate::http::HttpMethod::OPTIONS => format!("\x1b[1;35m{}\x1b[0m \x1b[37m{}\x1b[0m \x1b[37m{}\x1b[0m", method.as_str(), path, version),  // 太字紫
-        crate::http::HttpMethod::PATCH => format!("\x1b[1;37m{}\x1b[0m \x1b[37m{}\x1b[0m \x1b[37m{}\x1b[0m", method.as_str(), path, version),    // 太字白
-        crate::http::HttpMethod::TRACE => format!("\x1b[1;90m{}\x1b[0m \x1b[37m{}\x1b[0m \x1b[37m{}\x1b[0m", method.as_str(), path, version),    // 太字グレー
-        crate::http::HttpMethod::CONNECT => format!("\x1b[1;94m{}\x1b[0m \x1b[37m{}\x1b[0m \x1b[37m{}\x1b[0m", method.as_str(), path, version),  // 太字明るい青
-        crate::http::HttpMethod::ERR => format!("\x1b[1;41m{}\x1b[0m \x1b[37m{}\x1b[0m \x1b[37m{}\x1b[0m", method.as_str(), path, version),      // 太字赤背景
+        crate::http::HttpMethod::GET => format!(
+            "\x1b[1;32m{}\x1b[0m \x1b[37m{}\x1b[0m \x1b[37m{}\x1b[0m",
+            method.as_str(),
+            path,
+            version
+        ), // 太字緑
+        crate::http::HttpMethod::POST => format!(
+            "\x1b[1;35m{}\x1b[0m \x1b[37m{}\x1b[0m \x1b[37m{}\x1b[0m",
+            method.as_str(),
+            path,
+            version
+        ), // 太字桃
+        crate::http::HttpMethod::PUT => format!(
+            "\x1b[1;33m{}\x1b[0m \x1b[37m{}\x1b[0m \x1b[37m{}\x1b[0m",
+            method.as_str(),
+            path,
+            version
+        ), // 太字黄
+        crate::http::HttpMethod::DELETE => format!(
+            "\x1b[1;31m{}\x1b[0m \x1b[37m{}\x1b[0m \x1b[37m{}\x1b[0m",
+            method.as_str(),
+            path,
+            version
+        ), // 太字赤
+        crate::http::HttpMethod::HEAD => format!(
+            "\x1b[1;36m{}\x1b[0m \x1b[37m{}\x1b[0m \x1b[37m{}\x1b[0m",
+            method.as_str(),
+            path,
+            version
+        ), // 太字シアン
+        crate::http::HttpMethod::OPTIONS => format!(
+            "\x1b[1;35m{}\x1b[0m \x1b[37m{}\x1b[0m \x1b[37m{}\x1b[0m",
+            method.as_str(),
+            path,
+            version
+        ), // 太字紫
+        crate::http::HttpMethod::PATCH => format!(
+            "\x1b[1;37m{}\x1b[0m \x1b[37m{}\x1b[0m \x1b[37m{}\x1b[0m",
+            method.as_str(),
+            path,
+            version
+        ), // 太字白
+        crate::http::HttpMethod::TRACE => format!(
+            "\x1b[1;90m{}\x1b[0m \x1b[37m{}\x1b[0m \x1b[37m{}\x1b[0m",
+            method.as_str(),
+            path,
+            version
+        ), // 太字グレー
+        crate::http::HttpMethod::CONNECT => format!(
+            "\x1b[1;94m{}\x1b[0m \x1b[37m{}\x1b[0m \x1b[37m{}\x1b[0m",
+            method.as_str(),
+            path,
+            version
+        ), // 太字明るい青
+        crate::http::HttpMethod::ERR => format!(
+            "\x1b[1;41m{}\x1b[0m \x1b[37m{}\x1b[0m \x1b[37m{}\x1b[0m",
+            method.as_str(),
+            path,
+            version
+        ), // 太字赤背景
     };
     let res_log = match status.info().code {
-        100..200 => format!("\x1b[1;37m{}\x1b[0m \x1b[37m{}\x1b[0m", status.as_str(), status.info().message),    // 太字白 + 白
-        200..300 => format!("\x1b[1;32m{}\x1b[0m \x1b[32m{}\x1b[0m", status.as_str(), status.info().message),    // 太字緑 + 緑
-        300..400 => format!("\x1b[1;34m{}\x1b[0m \x1b[34m{}\x1b[0m", status.as_str(), status.info().message),    // 太字青 + 青
-        400..500 => format!("\x1b[1;33m{}\x1b[0m \x1b[33m{}\x1b[0m", status.as_str(), status.info().message),    // 太字黄 + 黄
-        500..600 => format!("\x1b[1;31m{}\x1b[0m \x1b[31m{}\x1b[0m", status.as_str(), status.info().message),    // 太字赤 + 赤
-        _ => format!("\x1b[1;35m{}\x1b[0m \x1b[35m{}\x1b[0m", status.as_str(), status.info().message),           // 太字紫 + 紫
+        100..200 => format!(
+            "\x1b[1;37m{}\x1b[0m \x1b[37m{}\x1b[0m",
+            status.as_str(),
+            status.info().message
+        ), // 太字白 + 白
+        200..300 => format!(
+            "\x1b[1;32m{}\x1b[0m \x1b[32m{}\x1b[0m",
+            status.as_str(),
+            status.info().message
+        ), // 太字緑 + 緑
+        300..400 => format!(
+            "\x1b[1;34m{}\x1b[0m \x1b[34m{}\x1b[0m",
+            status.as_str(),
+            status.info().message
+        ), // 太字青 + 青
+        400..500 => format!(
+            "\x1b[1;33m{}\x1b[0m \x1b[33m{}\x1b[0m",
+            status.as_str(),
+            status.info().message
+        ), // 太字黄 + 黄
+        500..600 => format!(
+            "\x1b[1;31m{}\x1b[0m \x1b[31m{}\x1b[0m",
+            status.as_str(),
+            status.info().message
+        ), // 太字赤 + 赤
+        _ => format!(
+            "\x1b[1;35m{}\x1b[0m \x1b[35m{}\x1b[0m",
+            status.as_str(),
+            status.info().message
+        ), // 太字紫 + 紫
     };
     info!("{} \x1b[1;97m->\x1b[0m {}", req_log, res_log);
 }

@@ -94,7 +94,6 @@ where
     Ok(())
 }
 
-
 /// RFC3986 unreserved: ALPHA / DIGIT / "-" / "." / "_" / "~"
 #[inline]
 fn is_unreserved(b: u8) -> bool {
@@ -155,11 +154,11 @@ pub fn url_decode_safe(input: &str) -> Result<Cow<'_, str>, UrlDecodeError> {
                 let lo = from_hex(bytes[i + 2])?;
                 out.push((hi << 4) | lo);
                 i += 3;
-            }
+            },
             b => {
                 out.push(b);
                 i += 1;
-            }
+            },
         }
     }
 

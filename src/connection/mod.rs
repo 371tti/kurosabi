@@ -1,3 +1,7 @@
+#[cfg(feature = "file")]
+#[cfg(not(feature = "tokio-server"))]
+compile_error!("feature `file` requires `tokio-server`");
+#[cfg(feature = "file")]
 #[cfg(feature = "tokio-server")]
 pub mod file;
 
@@ -233,9 +237,8 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
     where
         T: Borrow<str> + Sized,
     {
-        self
-          .set_status_code(HttpStatusCode::Found)
-          .redirect(location.borrow())
+        self.set_status_code(HttpStatusCode::Found)
+            .redirect(location.borrow())
     }
 }
 
@@ -516,9 +519,7 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
     where
         T: Borrow<str> + Sized,
     {
-        self
-          .add_header("Location", location.borrow())
-          .no_body()
+        self.add_header("Location", location.borrow()).no_body()
     }
 
     #[inline]
