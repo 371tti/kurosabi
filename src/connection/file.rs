@@ -355,7 +355,7 @@ impl FileContentBuilder<FileContentBuilderReady> {
         }
     }
 
-    pub(crate) async fn build(mut self) -> std::io::Result<FileContent> {
+    pub async fn build(mut self) -> std::io::Result<FileContent> {
         self.path = if self.to_safe {
             self.safe_path_under()?
         } else {
