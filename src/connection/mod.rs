@@ -227,6 +227,16 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
     pub fn no_body(self) -> Connection<C, R, W, ResponseReadyToSend> {
         self.set_status_code(HttpStatusCode::OK).no_body()
     }
+
+    #[inline]
+    pub fn redirect<T>(self, location: T) -> Connection<C, R, W, ResponseReadyToSend>
+    where
+        T: Borrow<str> + Sized,
+    {
+        self
+          .set_status_code(HttpStatusCode::Found)
+          .redirect(location.borrow())
+    }
 }
 
 impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connection<C, R, W, StatusSetNoneBody> {
@@ -499,6 +509,16 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
             res: self.res,
             phantom: std::marker::PhantomData,
         }
+    }
+
+    #[inline]
+    pub fn redirect<T>(self, location: T) -> Connection<C, R, W, ResponseReadyToSend>
+    where
+        T: Borrow<str> + Sized,
+    {
+        self
+          .add_header("Location", location.borrow())
+          .no_body()
     }
 
     #[inline]
