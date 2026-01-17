@@ -21,9 +21,9 @@ use crate::{
     server::{DEFAULT_LIMIT_HANDLE_NUM, DEFAULT_TCP_BACKLOG},
 };
 
-pub type Conn<C, S> = Connection<C, Compat<OwnedReadHalf>, Compat<OwnedWriteHalf>, S>;
-pub type ConnReq<C> = Connection<C, Compat<OwnedReadHalf>, Compat<OwnedWriteHalf>, NoneBody>;
-pub type ConnRes<C> = Connection<C, Compat<OwnedReadHalf>, Compat<OwnedWriteHalf>, ResponseReadyToSend>;
+pub type Conn<C = DefaultContext, S = NoneBody> = Connection<C, Compat<OwnedReadHalf>, Compat<OwnedWriteHalf>, S>;
+pub type ConnReq<C = DefaultContext> = Connection<C, Compat<OwnedReadHalf>, Compat<OwnedWriteHalf>, NoneBody>;
+pub type ConnRes<C = DefaultContext> = Connection<C, Compat<OwnedReadHalf>, Compat<OwnedWriteHalf>, ResponseReadyToSend>;
 
 pub struct KurosabiServerBuilder {}
 pub struct KurosabiTokioServerBuilder<C: Clone = DefaultContext> {

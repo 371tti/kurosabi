@@ -1,6 +1,6 @@
 [package]
 name = "kurosabi"
-version = "0.6.9"
+version = "0.6.10"
 edition = "2024"
 authors = ["371tti"]
 description = "A lightweight asynchronous HTTP server framework built on Tokio."
