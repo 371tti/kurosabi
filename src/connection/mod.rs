@@ -235,7 +235,7 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
     {
         self
           .set_status_code(HttpStatusCode::Found)
-          .redirect(self, location.borrow())
+          .redirect(location.borrow())
     }
 }
 
