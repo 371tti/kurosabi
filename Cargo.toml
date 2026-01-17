@@ -1,6 +1,6 @@
 [package]
 name = "kurosabi"
-version = "0.6.8"
+version = "0.6.9"
 edition = "2024"
 authors = ["371tti"]
 description = "A lightweight asynchronous HTTP server framework built on Tokio."
@@ -45,7 +45,7 @@ required-features = ["tokio-server"]
 [[example]]
 name = "coffee"
 path = "examples/coffee.rs"
-required-features = ["tokio-server", "json"]
+required-features = ["tokio-server", "json", "logging"]
 
 [[example]]
 name = "file"

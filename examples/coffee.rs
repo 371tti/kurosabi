@@ -57,6 +57,9 @@ const HTML: &str = r#"<!DOCTYPE html>
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 16)]
 async fn main() -> Result<()> {
+    env_logger::Builder::new()
+        .filter_level(log::LevelFilter::Info)
+        .init();
     let server = KurosabiTokioServerBuilder::default().router_and_build(
         |mut conn: Connection<DefaultContext, Compat<OwnedReadHalf>, Compat<OwnedWriteHalf>>| async move {
             let method = conn.req.method();

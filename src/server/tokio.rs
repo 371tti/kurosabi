@@ -16,10 +16,14 @@ use tokio::{
 use tokio_util::compat::{Compat, TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
 
 use crate::{
-    connection::{Connection, ResponseReadyToSend},
+    connection::{Connection, NoneBody, ResponseReadyToSend},
     router::{DEFAULT_KEEP_ALIVE_TIMEOUT, DefaultContext, KurosabiRouter, Router},
     server::{DEFAULT_LIMIT_HANDLE_NUM, DEFAULT_TCP_BACKLOG},
 };
+
+pub type Conn<C, S> = Connection<C, Compat<OwnedReadHalf>, Compat<OwnedWriteHalf>, S>;
+pub type ConnReq<C> = Connection<C, Compat<OwnedReadHalf>, Compat<OwnedWriteHalf>, NoneBody>;
+pub type ConnRes<C> = Connection<C, Compat<OwnedReadHalf>, Compat<OwnedWriteHalf>, ResponseReadyToSend>;
 
 pub struct KurosabiServerBuilder {}
 pub struct KurosabiTokioServerBuilder<C: Clone = DefaultContext> {
