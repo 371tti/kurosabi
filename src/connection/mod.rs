@@ -46,7 +46,9 @@ pub const STREAM_CHUNK_SIZE: usize = 1024 * 32; // 32KB
 impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static, S: ConnectionState> Connection<C, R, W, S> {
     #[inline(always)]
     pub fn path_seg_iter<'a>(&'a self) -> std::str::Split<'a, char> {
-        self.req.path_full()[1..].split('/')
+        let full = self.req.path_full();
+        let path_only = full.split_once('?').map_or(full, |(path, _)| path);
+        path_only[1..].split('/')
     }
 
     #[inline(always)]
