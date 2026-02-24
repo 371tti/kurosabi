@@ -5,6 +5,7 @@ use std::{
     time::Duration,
 };
 
+#[cfg(feature = "logging")]
 use log::{debug, info};
 use tokio::{
     net::{
@@ -190,7 +191,7 @@ impl<C: Clone + Sync + Send + 'static, H: Handler<C>> KurosabiTokioServer<C, H> 
         let router = self.router;
 
         loop {
-            let (stream, addr) = listener.accept().await?;
+            let (stream, _addr) = listener.accept().await?;
             #[cfg(feature = "logging")]
             debug!("Accepted connection from {}", addr);
             let permit = sem

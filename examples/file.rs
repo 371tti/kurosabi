@@ -27,7 +27,7 @@ async fn main() -> Result<()> {
                             Err(Some(file_paths)) => {
                                 let html = file_paths
                                     .into_iter()
-                                    .filter_map(|p| p.to_str().map(|s| s.to_string()))
+                                    .filter_map(|p| p.path.to_str().map(|s| s.to_string()))
                                     .map(|p| {
                                         format!(
                                             "<li><a href=\"/file/{}\">{}</a></li>",

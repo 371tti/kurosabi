@@ -1,5 +1,4 @@
-#[cfg(feature = "compio-server")]
-pub mod compio;
+
 #[cfg(feature = "tokio-server")]
 pub mod tokio;
 

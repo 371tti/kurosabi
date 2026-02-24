@@ -23,16 +23,13 @@ tokio-util = { version = "0.7", features = ["compat"], optional = true }
 serde = { version = "1", features = ["derive"], optional = true }
 serde_json = { version = "1", optional = true }
 
-compio = { version = "0.17", optional = true }
-compio-io = { version = "0.8", features = ["compat"], optional = true }
 mime_guess = { version = "2", optional = true }
 chardetng = { version = "0.1", optional = true }
 
 
 [features]
-default = ["tokio-server", "logging", "file"]
+default = []
 tokio-server = ["tokio", "tokio-util"]
-compio-server = ["compio", "compio-io"]
 json = ["serde", "serde_json"]
 logging = ["log", "env_logger"]
 file = ["mime_guess", "chardetng"]
@@ -50,4 +47,9 @@ required-features = ["tokio-server", "json", "logging"]
 [[example]]
 name = "file"
 path = "examples/file.rs"
+required-features = ["tokio-server", "logging", "file"]
+
+[[example]]
+name = "routing"
+path = "examples/routing.rs"
 required-features = ["tokio-server", "logging", "file"]

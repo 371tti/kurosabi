@@ -21,7 +21,6 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
     /// ファイルをレスポンスボディとして送信する
     /// rangeヘッダを考慮します
     #[inline]
-    #[deprecated(note = "十分な検証ができていません。streamingメソッドで代替できます。")]
     #[cfg(feature = "tokio-server")]
     pub async fn file_body(
         mut self,
