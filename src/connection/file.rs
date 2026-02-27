@@ -155,8 +155,8 @@ impl FileContentBuilderState for FileContentBuilderReady {}
 
 /// ファイルレスポンスのビルダ
 pub struct FileContentBuilder<S = FileContentBuilderInit> {
-    base: std::path::PathBuf,
-    path: std::path::PathBuf,
+    base: PathBuf,
+    path: PathBuf,
     content_type: ContentType,
     content_range: ContentRange,
     content_disposition: ContentDisposition,
@@ -167,6 +167,7 @@ pub struct FileContentBuilder<S = FileContentBuilderInit> {
 pub struct FileContent {
     pub file: File,
     pub mime_type: String,
+    pub file_path: PathBuf,
     pub full_size: u64,
     /// range ヘッダがない場合に使える範囲
     pub default_range: Range<u64>,
@@ -438,6 +439,7 @@ impl FileContentBuilder<FileContentBuilderReady> {
         Ok(FileContent {
             disposition: self.content_disposition,
             mime_type,
+            file_path: self.path,
             file,
             full_size,
             default_range,

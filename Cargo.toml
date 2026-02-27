@@ -1,9 +1,9 @@
 [package]
 name = "kurosabi"
-version = "0.6.14"
+version = "0.6.15"
 edition = "2024"
 authors = ["371tti"]
-description = "A lightweight asynchronous HTTP server framework built on Tokio."
+description = "A lightweight asynchronous HTTP server framework"
 license = "MIT"
 repository = "https://github.com/371tti/kurosabi"
 readme = "README.md"
@@ -28,7 +28,7 @@ chardetng = { version = "0.1", optional = true }
 
 
 [features]
-default = []
+default = ["tokio-server", "json", "logging", "file"]
 tokio-server = ["tokio", "tokio-util"]
 json = ["serde", "serde_json"]
 logging = ["log", "env_logger"]
@@ -47,9 +47,4 @@ required-features = ["tokio-server", "json", "logging"]
 [[example]]
 name = "file"
 path = "examples/file.rs"
-required-features = ["tokio-server", "logging", "file"]
-
-[[example]]
-name = "routing"
-path = "examples/routing.rs"
 required-features = ["tokio-server", "logging", "file"]
