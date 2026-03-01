@@ -98,8 +98,6 @@ impl KurosabiTokioServerBuilder<DefaultContext> {
 
 impl<C: Clone + Sync + Send> KurosabiTokioServerBuilder<C> {
     pub fn with_context(context: C) -> Self
-    where
-        C: Default,
     {
         KurosabiTokioServerBuilder {
             context,
