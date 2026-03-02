@@ -103,6 +103,17 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
     }
 
     #[inline]
+    pub fn set_cookie<K, V>(mut self, key: K, value: V) -> Self
+    where
+        K: Into<String>,
+        V: Into<String>,
+    {
+        let cookie_value = format!("{}={}", key.into(), value.into());
+        self.res.header_add("Set-Cookie", cookie_value);
+        self
+    }
+
+    #[inline]
     pub fn text_body<T>(self, body: T) -> Connection<C, R, W, ResponseReadyToSend>
     where
         T: Borrow<str> + Sized,

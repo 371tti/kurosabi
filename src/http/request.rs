@@ -117,6 +117,20 @@ impl<R: AsyncRead + Unpin + 'static> HttpRequest<R> {
             .map_err(|e| serde_json::Error::io(e))?;
         serde_json::from_slice(&body_bytes)
     }
+
+    #[inline(always)]
+    pub async fn get_cookie(&mut self, key: &str) -> Option<String> {
+        let cookie_header = self.header_get("Cookie").await?;
+        let cookies = cookie_header.split(';').map(|s| s.trim());
+        for cookie in cookies {
+            if let Some((k, v)) = cookie.split_once('=') {
+                if k.trim() == key {
+                    return Some(v.trim().to_string());
+                }
+            }
+        }
+        None
+    }
 }
 
 impl<R: AsyncRead + Unpin + 'static> HttpRequest<R> {
