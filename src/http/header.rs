@@ -1,4 +1,5 @@
 use std::borrow::Borrow;
+use std::fmt::Write;
 use std::ops::Range;
 
 use std::string::String;
@@ -260,4 +261,200 @@ impl HttpHeader {
 
         Some((header, body_start))
     }
+}
+
+#[derive(Clone, Debug)]
+pub enum SameSite {
+    Strict,
+    Lax,
+    None,
+}
+
+impl SameSite {
+    #[inline]
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            SameSite::Strict => "Strict",
+            SameSite::Lax => "Lax",
+            SameSite::None => "None",
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct Cookie {
+    pub name: String,
+    pub value: String,
+    pub domain: Option<String>,
+    pub path: Option<String>,
+    /// RFC1123/RFC2822-ish HTTP-date string (e.g. "Wed, 21 Oct 2015 07:28:00 GMT")
+    pub expires: Option<String>,
+    /// seconds
+    pub max_age: Option<u64>,
+    pub secure: bool,
+    pub http_only: bool,
+    pub same_site: Option<SameSite>,
+    pub partitioned: bool,
+    pub priority: Option<CookiePriority>,
+}
+
+#[derive(Clone, Debug)]
+pub enum CookiePriority {
+    Low,
+    Medium,
+    High,
+}
+
+impl CookiePriority {
+    #[inline]
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            CookiePriority::Low => "Low",
+            CookiePriority::Medium => "Medium",
+            CookiePriority::High => "High",
+        }
+    }
+}
+
+impl Cookie {
+    /// Render into a `Set-Cookie` header value.
+    /// Note: this does not include the "Set-Cookie: " prefix.
+    pub fn to_set_cookie_value(&self) -> String {
+        // Rough capacity guess to reduce realloc
+        let mut out = String::with_capacity(self.name.len() + self.value.len() + 128);
+
+        // name=value
+        // (Caller should pre-encode value as needed; here we keep it raw.)
+        let _ = write!(&mut out, "{}={}", self.name, self.value);
+
+        if let Some(domain) = &self.domain {
+            let _ = write!(&mut out, "; Domain={}", domain);
+        }
+        if let Some(path) = &self.path {
+            let _ = write!(&mut out, "; Path={}", path);
+        }
+        if let Some(expires) = &self.expires {
+            let _ = write!(&mut out, "; Expires={}", expires);
+        }
+        if let Some(max_age) = self.max_age {
+            let _ = write!(&mut out, "; Max-Age={}", max_age);
+        }
+
+        if self.secure {
+            out.push_str("; Secure");
+        }
+        if self.http_only {
+            out.push_str("; HttpOnly");
+        }
+        if let Some(ss) = &self.same_site {
+            let _ = write!(&mut out, "; SameSite={}", ss.as_str());
+        }
+        if let Some(p) = &self.priority {
+            let _ = write!(&mut out, "; Priority={}", p.as_str());
+        }
+        if self.partitioned {
+            out.push_str("; Partitioned");
+        }
+
+        out
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct CookieBuilder {
+    cookie: Cookie,
+}
+
+impl CookieBuilder {
+    /// By default:
+    /// - Secure = true
+    /// - HttpOnly = true
+    /// - SameSite = None (unset; recommend setting explicitly)
+    pub fn new(name: impl Into<String>, value: impl Into<String>) -> Self {
+        CookieBuilder {
+            cookie: Cookie {
+                name: name.into(),
+                value: value.into(),
+                domain: None,
+                path: None,
+                expires: None,
+                max_age: None,
+                secure: true,
+                http_only: true,
+                same_site: None,
+                partitioned: false,
+                priority: None,
+            },
+        }
+    }
+
+    pub fn domain(mut self, domain: impl Into<String>) -> Self {
+        self.cookie.domain = Some(domain.into());
+        self
+    }
+
+    pub fn path(mut self, path: impl Into<String>) -> Self {
+        self.cookie.path = Some(path.into());
+        self
+    }
+
+    /// Set Expires as a raw HTTP-date string (e.g. "Wed, 21 Oct 2015 07:28:00 GMT").
+    /// If you use chrono, you can format it yourself before passing.
+    pub fn expires(mut self, expires_http_date: impl Into<String>) -> Self {
+        self.cookie.expires = Some(expires_http_date.into());
+        self
+    }
+
+    /// Set Max-Age seconds.
+    pub fn max_age(mut self, seconds: u64) -> Self {
+        self.cookie.max_age = Some(seconds);
+        self
+    }
+
+    pub fn secure(mut self, on: bool) -> Self {
+        self.cookie.secure = on;
+        self
+    }
+
+    pub fn http_only(mut self, on: bool) -> Self {
+        self.cookie.http_only = on;
+        self
+    }
+
+    pub fn same_site(mut self, same_site: SameSite) -> Self {
+        self.cookie.same_site = Some(same_site);
+        self
+    }
+
+    pub fn priority(mut self, p: CookiePriority) -> Self {
+        self.cookie.priority = Some(p);
+        self
+    }
+
+    /// CHIPS (Partitioned cookies). Typically requires Secure in practice.
+    pub fn partitioned(mut self, on: bool) -> Self {
+        self.cookie.partitioned = on;
+        self
+    }
+
+    /// Convenience: delete cookie (set Max-Age=0). You still must match Path/Domain of the cookie you want to delete.
+    pub fn delete(mut self) -> Self {
+        self.cookie.max_age = Some(0);
+        // Expires is optional if Max-Age=0, but some clients are happier if both exist.
+        // Leave expires as-is unless caller sets it.
+        self
+    }
+
+    pub fn build(self) -> Cookie {
+        self.cookie
+    }
+
+    /// Build and render directly to a Set-Cookie header value.
+    pub fn finish(self) -> String {
+        self.cookie.to_set_cookie_value()
+    }
+}
+
+pub fn format_cookie_expires(dt: chrono::DateTime<chrono::Utc>) -> String {
+    dt.format("%a, %d %b %Y %H:%M:%S GMT").to_string()
 }

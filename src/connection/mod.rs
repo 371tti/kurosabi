@@ -12,7 +12,7 @@ use futures_util::{AsyncReadExt, AsyncWriteExt, future::join};
 
 use crate::{
     error::{ConnectionResult, ErrorPare, RouterError},
-    http::{code::HttpStatusCode, request::HttpRequest, response::HttpResponse},
+    http::{code::HttpStatusCode, header::Cookie, request::HttpRequest, response::HttpResponse},
     utils::{write_all_vectored3, write_hex_crlf},
 };
 
@@ -103,12 +103,9 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
     }
 
     #[inline]
-    pub fn set_cookie<K, V>(mut self, key: K, value: V) -> Self
-    where
-        K: Into<String>,
-        V: Into<String>,
+    pub fn set_cookie(mut self, cookie: Cookie) -> Self
     {
-        let cookie_value = format!("{}={}", key.into(), value.into());
+        let cookie_value = cookie.to_set_cookie_value();
         self.res.header_add("Set-Cookie", cookie_value);
         self
     }
