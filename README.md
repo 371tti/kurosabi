@@ -25,7 +25,7 @@ kurosabiは、Rustの安全性と並列性を活かした、超軽量・高速�
 - JSON・ファイルレスポンス
 - カスタムコンテキスト対応
 - 404やエラー処理が簡単
-- トップレベルのスールプット-安定レイテンシ[ベンチマークリポジトリ](https://github.com/371tti/rust-http-server-bench)
+- トップレベルのスールプット-安定レイテンシ-省メモリ[ベンチマークリポジトリ](https://github.com/371tti/rust-http-server-bench)
 
 
 ## インストール
