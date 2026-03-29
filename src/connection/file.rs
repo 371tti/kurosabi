@@ -450,6 +450,7 @@ impl FileContentBuilder<FileContentBuilderReady> {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct DirEntryInfo {
     pub path: PathBuf,
     pub kind: FileType,
