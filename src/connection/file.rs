@@ -154,6 +154,7 @@ pub struct FileContentBuilderReady;
 impl FileContentBuilderState for FileContentBuilderReady {}
 
 /// ファイルレスポンスのビルダ
+#[derive(Clone)]
 pub struct FileContentBuilder<S = FileContentBuilderInit> {
     base: PathBuf,
     path: PathBuf,
@@ -177,11 +178,13 @@ pub struct FileContent {
     pub force_range: bool,
 }
 
+#[derive(Clone)]
 pub enum ContentType {
     Guess,
     Custom(String),
 }
 
+#[derive(Clone)]
 pub enum ContentRange {
     /// follow range header or full size
     Auto,
@@ -194,6 +197,7 @@ pub enum ContentRange {
     StartEnd(u64, u64),
 }
 
+#[derive(Clone)]
 pub enum ContentDisposition {
     Inline,
     Attachment,
