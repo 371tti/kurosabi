@@ -277,25 +277,31 @@ where
     Fut: Future<Output = ConnRes<C>> + Send + 'static,
 {
     async fn dispatch(&self, conn: ConnReq<C>) -> RouteDispatch<C> {
-        let (own_path_match, own_method_match) = {
-            let path = strip_query(conn.req.path_full());
-            let method = conn.req.method();
-            (self.path_pattern.is_match(path), &self.method == method)
-        };
-
         let dispatched = self.tail.dispatch(conn).await;
         match dispatched {
             RouteDispatch::Matched(conn) => RouteDispatch::Matched(conn),
             RouteDispatch::MethodNotAllowed(conn) => {
-                if own_path_match && own_method_match {
-                    RouteDispatch::Matched((self.handler)(conn).await)
-                } else {
+                if self.method != *conn.req.method() {
                     RouteDispatch::MethodNotAllowed(conn)
+                } else {
+                    let own_path_match = {
+                        let path = strip_query(conn.req.path_full());
+                        self.path_pattern.is_match(path)
+                    };
+                    if own_path_match {
+                        RouteDispatch::Matched((self.handler)(conn).await)
+                    } else {
+                        RouteDispatch::MethodNotAllowed(conn)
+                    }
                 }
             },
             RouteDispatch::NotFound(conn) => {
+                let own_path_match = {
+                    let path = strip_query(conn.req.path_full());
+                    self.path_pattern.is_match(path)
+                };
                 if own_path_match {
-                    if own_method_match {
+                    if self.method == *conn.req.method() {
                         RouteDispatch::Matched((self.handler)(conn).await)
                     } else {
                         RouteDispatch::MethodNotAllowed(conn)
