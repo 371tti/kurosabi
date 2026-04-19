@@ -43,12 +43,106 @@ impl ConnectionState for CompletedResponse {}
 
 pub const STREAM_CHUNK_SIZE: usize = 1024 * 32; // 32KB
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PathSegments<'a> {
+    path: &'a str,
+}
+
+impl<'a> PathSegments<'a> {
+    #[inline(always)]
+    pub fn new(path_full: &'a str) -> Self {
+        let path_only = path_full
+            .split_once('?')
+            .map_or(path_full, |(path, _)| path);
+        let path = path_only.strip_prefix('/').unwrap_or(path_only);
+        Self { path }
+    }
+
+    #[inline(always)]
+    pub fn as_path(self) -> &'a str {
+        self.path
+    }
+
+    #[inline(always)]
+    pub fn iter(self) -> std::str::Split<'a, char> {
+        self.path.split('/')
+    }
+
+    #[inline(always)]
+    pub fn get(self, index: usize) -> Option<&'a str> {
+        let bytes = self.path.as_bytes();
+        let mut seg_index = 0usize;
+        let mut start = 0usize;
+
+        for i in 0..=bytes.len() {
+            if i == bytes.len() || bytes[i] == b'/' {
+                if seg_index == index {
+                    return Some(&self.path[start..i]);
+                }
+                seg_index += 1;
+                start = i + 1;
+            }
+        }
+        None
+    }
+
+    #[inline(always)]
+    pub fn first(self) -> Option<&'a str> {
+        self.get(0)
+    }
+
+    #[inline(always)]
+    pub fn tail_from(self, index: usize) -> Option<&'a str> {
+        if index == 0 {
+            return Some(self.path);
+        }
+
+        let bytes = self.path.as_bytes();
+        let mut seg_index = 0usize;
+        let mut start = 0usize;
+
+        for i in 0..=bytes.len() {
+            if i == bytes.len() || bytes[i] == b'/' {
+                if seg_index == index {
+                    return Some(&self.path[start..]);
+                }
+                seg_index += 1;
+                start = i + 1;
+            }
+        }
+        None
+    }
+}
+
+impl<'a> IntoIterator for PathSegments<'a> {
+    type Item = &'a str;
+    type IntoIter = std::str::Split<'a, char>;
+
+    #[inline(always)]
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
 impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static, S: ConnectionState> Connection<C, R, W, S> {
     #[inline(always)]
+    pub fn path_segments<'a>(&'a self) -> PathSegments<'a> {
+        PathSegments::new(self.req.path_full())
+    }
+
+    #[inline(always)]
     pub fn path_seg_iter<'a>(&'a self) -> std::str::Split<'a, char> {
-        let full = self.req.path_full();
-        let path_only = full.split_once('?').map_or(full, |(path, _)| path);
-        path_only[1..].split('/')
+        self.path_segments().iter()
+    }
+
+    #[inline(always)]
+    pub fn path_seg<'a>(&'a self, index: usize) -> Option<&'a str> {
+        self.path_segments().get(index)
+    }
+
+    #[inline(always)]
+    pub fn path_tail<'a>(&'a self, index: usize) -> Option<&'a str> {
+        self.path_segments().tail_from(index)
     }
 
     #[inline(always)]
@@ -103,8 +197,7 @@ impl<C, R: AsyncRead + Unpin + 'static, W: AsyncWrite + Unpin + 'static> Connect
     }
 
     #[inline]
-    pub fn set_cookie(mut self, cookie: Cookie) -> Self
-    {
+    pub fn set_cookie(mut self, cookie: Cookie) -> Self {
         let cookie_value = cookie.to_set_cookie_value();
         self.res.header_add("Set-Cookie", cookie_value);
         self
