@@ -91,31 +91,58 @@ impl RoutePattern {
         RoutePattern::Segments(segments)
     }
 
+    #[inline(always)]
     fn is_match(&self, request_path: &str) -> bool {
         match self {
             RoutePattern::Exact(pattern) => pattern == request_path,
-            RoutePattern::Segments(segments) => {
-                let mut req_segments = split_path_for_match(request_path);
-                for seg in segments {
-                    match seg {
-                        PatternSegment::Static(expected) => match req_segments.next() {
-                            Some(actual) if actual == expected => {},
-                            _ => return false,
-                        },
-                        PatternSegment::Param => {
-                            if req_segments.next().is_none() {
-                                return false;
-                            }
-                        },
-                        PatternSegment::CatchAll => {
-                            return true;
-                        },
-                    }
-                }
-                req_segments.next().is_none()
-            },
+            RoutePattern::Segments(segments) => is_match_segments(segments, request_path),
         }
     }
+}
+
+#[inline(always)]
+fn is_match_segments(segments: &[PatternSegment], request_path: &str) -> bool {
+    let path = request_path.strip_prefix('/').unwrap_or(request_path);
+    let bytes = path.as_bytes();
+    let mut pat_idx = 0usize;
+    let mut start = 0usize;
+    let mut i = 0usize;
+
+    loop {
+        let at_end = i == bytes.len();
+        if at_end || bytes[i] == b'/' {
+            if pat_idx >= segments.len() {
+                return false;
+            }
+
+            match &segments[pat_idx] {
+                PatternSegment::Static(expected) => {
+                    if &path[start..i] != expected {
+                        return false;
+                    }
+                },
+                PatternSegment::Param => {},
+                PatternSegment::CatchAll => return true,
+            }
+            pat_idx += 1;
+
+            if at_end {
+                break;
+            }
+
+            i += 1;
+            start = i;
+            continue;
+        }
+
+        i += 1;
+    }
+
+    if pat_idx == segments.len() {
+        return true;
+    }
+
+    pat_idx + 1 == segments.len() && matches!(segments[pat_idx], PatternSegment::CatchAll)
 }
 
 #[derive(Clone)]

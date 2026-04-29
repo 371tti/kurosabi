@@ -6,6 +6,7 @@ use crate::http::request::parse_range_header_value;
 use crate::http::request::{RangeParse, RangeSpec};
 use crate::utils::url_decode_fast;
 use crate::{connection::ResponseReadyToSend, error::ConnectionResult};
+use chardetng::{EncodingDetector, Iso2022JpDetection, Utf8Detection};
 use futures_io::{AsyncRead, AsyncWrite};
 use mime_guess::mime;
 use std::fs::FileType;
@@ -368,6 +369,7 @@ impl FileContentBuilder<FileContentBuilderReady> {
         let mut file = File::open(&self.path).await?;
         let metadata = file.metadata().await?;
         let mime_type = match &self.content_type {
+            // HTTPの仕様では推測しないほうがよいので今後削除する可能性がある
             ContentType::Guess => {
                 let mime = mime_guess::from_path(&self.path).first_or_octet_stream();
                 let fmt = match mime.type_() {
@@ -384,9 +386,9 @@ impl FileContentBuilder<FileContentBuilderReady> {
 
                         file.seek(std::io::SeekFrom::Start(0)).await?;
 
-                        let mut det = chardetng::EncodingDetector::new();
+                        let mut det = EncodingDetector::new(Iso2022JpDetection::Deny);
                         det.feed(&buf, true);
-                        let encoding = det.guess(None, true);
+                        let encoding = det.guess(None,  Utf8Detection::Allow);
                         let name = encoding.name(); // &'static str
                         match name {
                             // Unicode
